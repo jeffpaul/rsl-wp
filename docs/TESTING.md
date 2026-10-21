@@ -257,7 +257,7 @@ define('WP_DEBUG_LOG', true);
 ### Common Test Failures
 
 **❌ Token generation fails**
-- Check PHP version (requires 7.4+)
+- Check PHP version (requires 8.0+)
 - Verify JWT library is loaded
 - Check server timezone settings
 

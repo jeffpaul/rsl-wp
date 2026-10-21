@@ -749,7 +749,11 @@ class RSL_Server {
 
 	private function get_jwt_secret() {
 		if ( defined( 'RSL_JWT_SECRET' ) && RSL_JWT_SECRET ) {
-			return RSL_JWT_SECRET;
+			// HS256 needs a key of at least 256 bits; php-jwt 7+ rejects shorter keys.
+			if ( strlen( RSL_JWT_SECRET ) >= 32 ) {
+				return RSL_JWT_SECRET;
+			}
+			_doing_it_wrong( __METHOD__, 'RSL_JWT_SECRET must be at least 32 bytes; falling back to the generated secret.', '0.0.6' );
 		}
 		$secret = get_option( 'rsl_jwt_secret' );
 		if ( ! $secret ) {

@@ -4,7 +4,7 @@ Donate link:       https://github.com/sponsors/jeffpaul
 Tags:              licensing, rsl, ai, content, copyright
 Requires at least: 5.0
 Tested up to:      6.8
-Requires PHP:      7.4
+Requires PHP:      8.0
 Stable tag:        0.0.5
 License:           GPLv2 or later
 License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -258,7 +258,7 @@ Significant enhancements including OAuth 2.0 authentication, WooCommerce integra
 
 **Requirements:**
 * WordPress 5.0+
-* PHP 7.4+
+* PHP 8.0+
 * MySQL 5.6+
 
 **Integration Methods:**
