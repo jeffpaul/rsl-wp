@@ -5,6 +5,9 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [ main, develop ]
 
+permissions:
+  contents: read
+
 jobs:
   validate-pr:
     name: PR Validation
