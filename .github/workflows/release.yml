@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Test Before Release
@@ -43,6 +46,8 @@ jobs:
     name: Build Release
     runs-on: ubuntu-latest
     needs: test
+    permissions:
+      contents: write
     
     steps:
     - name: Checkout code
