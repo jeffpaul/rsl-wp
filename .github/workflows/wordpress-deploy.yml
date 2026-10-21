@@ -13,6 +13,9 @@ on:
         required: false
         default: 'true'
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Deploy to WordPress.org
