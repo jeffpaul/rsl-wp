@@ -5,6 +5,10 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [ main, develop ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -12,7 +16,8 @@ jobs:
   validate-pr:
     name: PR Validation
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+    # Title, test-coverage and breaking-change checks don't apply to dependency bumps.
+    if: github.event.pull_request.draft == false && github.actor != 'dependabot[bot]'
     
     steps:
     - name: Checkout code
@@ -20,17 +25,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: '8.1'
-
-    - name: Install dependencies
-      run: composer install --dev
-
     - name: Check PR title format
+      env:
+        TITLE: ${{ github.event.pull_request.title }}
       run: |
-        TITLE="${{ github.event.pull_request.title }}"
         
         # Check for conventional commit format or descriptive title
         if [[ "$TITLE" =~ ^(feat|fix|docs|style|refactor|test|chore|security)(\(.+\))?:\ .+ ]] || 
@@ -61,12 +59,6 @@ jobs:
           fi
         fi
 
-    - name: Run quick tests
-      run: |
-        echo "Running quick test suite..."
-        vendor/bin/phpunit tests/unit/TestBasicFunctionality.php tests/unit/TestRSLLicense.php
-        echo "✅ Quick tests passed"
-
     - name: Check for breaking changes
       run: |
         # Check if any public APIs have changed
@@ -84,28 +76,10 @@ jobs:
           } || echo "✅ No public functions removed"
         fi
 
-    - name: Validate plugin structure
-      run: |
-        echo "Validating plugin structure..."
-        
-        # Required files
-        test -f rsl-wp.php || { echo "❌ Main plugin file missing"; exit 1; }
-        test -d includes/ || { echo "❌ Includes directory missing"; exit 1; }
-        test -f README.md || { echo "❌ README.md missing"; exit 1; }
-        
-        # Check plugin header
-        grep -q "Plugin Name:" rsl-wp.php || { echo "❌ Plugin header missing"; exit 1; }
-        grep -q "Version:" rsl-wp.php || { echo "❌ Version header missing"; exit 1; }
-        
-        echo "✅ Plugin structure valid"
-
     - name: Check code quality
       run: |
-        # Basic code quality checks
+        # Basic code quality checks (PHP syntax, tests and plugin structure are covered by ci.yml)
         echo "Running basic code quality checks..."
-        
-        # Check for PHP syntax errors
-        find includes/ -name "*.php" -exec php -l {} \; | grep -v "No syntax errors" && exit 1 || echo "✅ No syntax errors"
         
         # Check for TODO/FIXME comments that should be addressed
         if grep -r "TODO\|FIXME\|XXX" includes/ --include="*.php"; then
@@ -120,6 +94,7 @@ jobs:
   size-impact:
     name: Plugin Size Impact
     runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false && github.actor != 'dependabot[bot]'
     
     steps:
     - name: Checkout base branch

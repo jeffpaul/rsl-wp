@@ -3,10 +3,25 @@ name: Security Analysis
 on:
   push:
     branches: [ main, develop ]
+    paths:
+      - 'composer.json'
+      - 'composer.lock'
+      - '**.php'
+      - '.github/workflows/security.yml'
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - 'composer.json'
+      - 'composer.lock'
+      - '**.php'
+      - '.github/workflows/security.yml'
   schedule:
-    - cron: '0 2 * * 1' # Weekly on Monday at 2 AM UTC
+    - cron: '0 6 * * 3' # Weekly on Wednesday at 6 AM UTC (clear of Monday's Dependabot run)
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -58,22 +73,24 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    # Secrets aren't passed to Dependabot runs, so Snyk steps skip when the token is absent.
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
     - name: Run Snyk to check for vulnerabilities
+      if: env.SNYK_TOKEN != ''
       uses: snyk/actions/php@master
       continue-on-error: true
-      env:
-        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       with:
-        args: --severity-threshold=high
+        args: --severity-threshold=high --sarif-file-output=snyk.sarif
 
     - name: Upload Snyk results to GitHub
-      uses: github/codeql-action/upload-sarif@v2
-      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      if: always() && hashFiles('snyk.sarif') != ''
       with:
         sarif_file: snyk.sarif
 
@@ -109,14 +126,14 @@ jobs:
         else
           echo "PHPStan config not found - creating basic config"
           cat > phpstan.neon << 'EOF'
-parameters:
-    level: 1
-    paths:
-        - includes/
-    ignoreErrors:
-        - '#Call to an undefined method#'
-        - '#Access to an undefined property#'
-EOF
+        parameters:
+            level: 1
+            paths:
+                - includes/
+            ignoreErrors:
+                - '#Call to an undefined method#'
+                - '#Access to an undefined property#'
+        EOF
           vendor/bin/phpstan analyse --error-format=github || echo "PHPStan analysis completed with warnings"
         fi
 

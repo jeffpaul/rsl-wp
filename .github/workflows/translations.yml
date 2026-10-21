@@ -3,12 +3,26 @@ name: Translation Quality & Coverage
 on:
   push:
     branches: [ main, develop ]
+    paths:
+      - 'languages/**'
+      - 'includes/**'
+      - 'admin/**'
+      - 'rsl-wp.php'
+      - 'uninstall.php'
+      - '.github/workflows/translations.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
       - 'languages/**'
-      - '**/*.php'
+      - 'includes/**'
+      - 'admin/**'
+      - 'rsl-wp.php'
+      - 'uninstall.php'
       - '.github/workflows/translations.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
