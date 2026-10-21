@@ -24,7 +24,7 @@
       "step": "installPlugin",
       "pluginData": {
         "resource": "url",
-        "url": "https://github-proxy.com/proxy/?repo=Jameswlepage/rsl-wp&release=v0.0.5-alpha&asset=rsl-licensing-0.0.5.zip"
+        "url": "https://github-proxy.com/proxy/?repo=jeffpaul/rsl-wp&release=v0.0.5-alpha&asset=rsl-licensing-0.0.5.zip"
       },
       "options": {
         "activate": true

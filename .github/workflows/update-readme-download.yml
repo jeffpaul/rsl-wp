@@ -119,7 +119,7 @@ jobs:
         else
           # Add version badge after title if not exists
           if ! grep -q "shields.io.*Version" README.md; then
-            sed -i '1a\\n[![Version](https://img.shields.io/badge/Version-'$VERSION'-blue)](https://github.com/jameswlepage/rsl-wp/releases/latest) [![Downloads](https://img.shields.io/github/downloads/jameswlepage/rsl-wp/total)](https://github.com/jameswlepage/rsl-wp/releases) [![License](https://img.shields.io/badge/License-GPL%20v2-blue)](https://www.gnu.org/licenses/gpl-2.0.html)\n' README.md
+            sed -i '1a\\n[![Version](https://img.shields.io/badge/Version-'$VERSION'-blue)](https://github.com/jeffpaul/rsl-wp/releases/latest) [![Downloads](https://img.shields.io/github/downloads/jeffpaul/rsl-wp/total)](https://github.com/jeffpaul/rsl-wp/releases) [![License](https://img.shields.io/badge/License-GPL%20v2-blue)](https://www.gnu.org/licenses/gpl-2.0.html)\n' README.md
           fi
         fi
 

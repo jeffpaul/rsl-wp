@@ -1,13 +1,13 @@
 === Really Simple Licensing ===
-Contributors: jameswlepage
-Donate link: https://github.com/sponsors/jameswlepage
-Tags: licensing, rsl, ai, content, copyright
+Contributors:      jameswlepage, jeffpaul
+Donate link:       https://github.com/sponsors/jeffpaul
+Tags:              licensing, rsl, ai, content, copyright
 Requires at least: 5.0
-Tested up to: 6.8
-Requires PHP: 7.4
-Stable tag: 0.0.5
-License: GPLv2 or later
-License URI: https://www.gnu.org/licenses/gpl-2.0.html
+Tested up to:      6.8
+Requires PHP:      7.4
+Stable tag:        0.0.5
+License:           GPLv2 or later
+License URI:       https://www.gnu.org/licenses/gpl-2.0.html
 
 Really Simple Licensing (RSL) support. Define machine-readable licensing terms for AI and automated systems.
 
@@ -140,7 +140,7 @@ Embeds RSL licensing directly into uploaded images, PDFs, and EPUB files.
 * [RSL Specification](https://rslstandard.org/rsl)
 * [RSL API Documentation](https://rslstandard.org/api)
 * [License Servers Guide](https://rslstandard.org/guide/license-servers)
-* [Plugin Documentation](https://github.com/jameswlepage/rsl-wp)
+* [Plugin Documentation](https://github.com/jeffpaul/rsl-wp)
 
 == Installation ==
 
@@ -281,7 +281,7 @@ All RSL 1.0 elements including content, license, permits, prohibits, payment (fr
 
 For support, documentation, and feature requests:
 
-* [Plugin Documentation](https://github.com/jameswlepage/rsl-wp)
+* [Plugin Documentation](https://github.com/jeffpaul/rsl-wp)
 * [WordPress.org Support Forum](https://wordpress.org/support/plugin/rsl-licensing/)
 * [RSL Specification](https://rslstandard.org/rsl)
 * [RSL API Documentation](https://rslstandard.org/api)
@@ -289,7 +289,7 @@ For support, documentation, and feature requests:
 
 == Contributing ==
 
-This plugin is open source! Contribute on [GitHub](https://github.com/jameswlepage/rsl-wp).
+This plugin is open source! Contribute on [GitHub](https://github.com/jeffpaul/rsl-wp).
 
 == License ==
 

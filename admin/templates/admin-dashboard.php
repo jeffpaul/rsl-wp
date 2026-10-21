@@ -34,7 +34,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	do_action( 'admin_notices' );
 	?>
 
-	<?php if ( isset( $_GET['settings-updated'] ) && wp_verify_nonce( wp_unslash( $_GET['_wpnonce'] ?? '' ), 'settings_updated' ) ) : ?>
+	<?php if ( isset( $_GET['settings-updated'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), 'settings_updated' ) ) : ?>
 		<div class="notice notice-success is-dismissible">
 			<p>
 			<?php

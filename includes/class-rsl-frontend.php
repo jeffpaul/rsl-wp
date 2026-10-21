@@ -53,7 +53,7 @@ class RSL_Frontend {
 	public function handle_rsl_xml_requests() {
 		global $wp_query;
 
-		if ( isset( $_GET['rsl_license'] ) && is_numeric( $_GET['rsl_license'] ) && wp_verify_nonce( wp_unslash( $_GET['_wpnonce'] ?? '' ), 'rsl_license_' . intval( $_GET['rsl_license'] ) ) ) {
+		if ( isset( $_GET['rsl_license'] ) && is_numeric( $_GET['rsl_license'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), 'rsl_license_' . intval( $_GET['rsl_license'] ) ) ) {
 			$license_id   = intval( $_GET['rsl_license'] );
 			$license_data = $this->license_handler->get_license( $license_id );
 
@@ -67,7 +67,7 @@ class RSL_Frontend {
 			}
 		}
 
-		if ( isset( $_GET['rsl_feed'] ) && wp_verify_nonce( wp_unslash( $_GET['_wpnonce'] ?? '' ), 'rsl_feed' ) ) {
+		if ( isset( $_GET['rsl_feed'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), 'rsl_feed' ) ) {
 			$this->output_rsl_feed();
 			exit;
 		}
@@ -105,20 +105,16 @@ class RSL_Frontend {
 			$override_url = get_post_meta( $post->ID, '_rsl_override_content_url', true );
 			if ( ! empty( $override_url ) ) {
 				$license_data['content_url'] = $override_url;
-			} else {
+			} elseif ( empty( $license_data['content_url'] ) || $license_data['content_url'] === '/' ) {
 				// Use current page URL if content_url is empty or "/"
-				if ( empty( $license_data['content_url'] ) || $license_data['content_url'] === '/' ) {
-					$license_data['content_url'] = get_permalink( $post->ID );
-				}
+				$license_data['content_url'] = get_permalink( $post->ID );
 			}
-		} else {
+		} elseif ( empty( $license_data['content_url'] ) ) {
 			// For non-post pages, use current URL if content_url is empty
-			if ( empty( $license_data['content_url'] ) ) {
-				$request_uri                 = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
-				$license_data['content_url'] = home_url( esc_url_raw( $request_uri ) );
-			} elseif ( $license_data['content_url'] === '/' ) {
-				$license_data['content_url'] = home_url( '/' );
-			}
+			$request_uri                 = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+			$license_data['content_url'] = home_url( esc_url_raw( $request_uri ) );
+		} elseif ( $license_data['content_url'] === '/' ) {
+			$license_data['content_url'] = home_url( '/' );
 		}
 
 		return $license_data;
@@ -168,7 +164,7 @@ class RSL_Frontend {
 			echo '    <item>' . "\n";
 			echo '      <title>' . esc_html( $license['name'] ) . '</title>' . "\n";
 			echo '      <link>' . esc_url( $this->get_license_xml_url( $license['id'] ) ) . '</link>' . "\n";
-			echo '      <description>' . esc_html( $license['description'] ?: 'RSL License' ) . '</description>' . "\n";
+			echo '      <description>' . esc_html( $license['description'] ? $license['description'] : 'RSL License' ) . '</description>' . "\n";
 			echo '      <guid>' . esc_url( $this->get_license_xml_url( $license['id'] ) ) . '</guid>' . "\n";
 
 			if ( ! empty( $license['updated_at'] ) ) {

@@ -92,6 +92,7 @@ jobs:
           --exclude='test-report.html' \
           --exclude='.phpunit*' \
           --exclude='phpunit.xml' \
+          --exclude='phpcs.xml*' \
           --exclude='composer.json' \
           --exclude='composer.lock' \
           --exclude='AGENTS.md' \
@@ -143,7 +144,7 @@ jobs:
         cp "${ZIP_NAME}" "releases/${ZIP_NAME}"
 
         # Update blueprint.json to point to raw.githubusercontent.com URL
-        NEW_URL="https://raw.githubusercontent.com/Jameswlepage/rsl-wp/main/releases/${ZIP_NAME}"
+        NEW_URL="https://raw.githubusercontent.com/jeffpaul/rsl-wp/main/releases/${ZIP_NAME}"
 
         # Use sed to replace the URL in blueprint.json
         sed -i 's|"url": "https://raw.githubusercontent.com/[^"]*"|"url": "'$NEW_URL'"|g' blueprint.json

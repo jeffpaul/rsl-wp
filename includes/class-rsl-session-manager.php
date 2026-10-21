@@ -262,7 +262,7 @@ class RSL_Session_Manager {
 		}
 
 		if ( ! empty( $expired_sessions ) ) {
-			// error_log(sprintf('RSL: Cleaned up %d expired sessions', count($expired_sessions)));
+			rsl_log( sprintf( 'Cleaned up %d expired sessions', count( $expired_sessions ) ), 'debug' );
 		}
 	}
 }

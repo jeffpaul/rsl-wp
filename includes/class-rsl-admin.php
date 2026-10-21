@@ -286,7 +286,7 @@ class RSL_Admin {
 		if (
 			isset( $_GET['edit'] ) &&
 			is_numeric( $_GET['edit'] ) &&
-			wp_verify_nonce( wp_unslash( $_GET['_wpnonce'] ?? '' ), 'edit_license' )
+			wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), 'edit_license' )
 		) {
 			$license_id   = intval( $_GET['edit'] );
 			$license_data = $this->license_handler->get_license( $license_id );
@@ -328,9 +328,7 @@ class RSL_Admin {
 
 		// --- BEGIN: RSL-safe URL/path validation ---
 		$content_url_input = isset( $_POST['content_url'] )
-			? sanitize_text_field(
-				trim( (string) wp_unslash( $_POST['content_url'] ) ),
-			)
+			? sanitize_text_field( wp_unslash( $_POST['content_url'] ) )
 			: '';
 
 		// Allow either:
@@ -1059,7 +1057,7 @@ class RSL_Admin {
             <p><a href="https://rslstandard.org" target="_blank">' .
 				__( 'RSL Standard Documentation', 'rsl-wp' ) .
 				'</a></p>
-            <p><a href="https://github.com/jameswlepage/rsl-wp" target="_blank">' .
+            <p><a href="https://github.com/jeffpaul/rsl-wp" target="_blank">' .
 				__( 'Plugin Documentation', 'rsl-wp' ) .
 				'</a></p>',
 		);
@@ -1268,10 +1266,10 @@ class RSL_Admin {
             <p><a href="https://rslstandard.org" target="_blank">' .
 				__( 'RSL Standard Docs', 'rsl-wp' ) .
 				'</a></p>
-            <p><a href="https://github.com/jameswlepage/rsl-wp/blob/main/docs/PAYMENTS.md" target="_blank">' .
+            <p><a href="https://github.com/jeffpaul/rsl-wp/blob/main/docs/PAYMENTS.md" target="_blank">' .
 				__( 'Payment Setup Guide', 'rsl-wp' ) .
 				'</a></p>
-            <p><a href="https://github.com/jameswlepage/rsl-wp/blob/main/docs/DEVELOPER.md" target="_blank">' .
+            <p><a href="https://github.com/jeffpaul/rsl-wp/blob/main/docs/DEVELOPER.md" target="_blank">' .
 				__( 'Developer Guide', 'rsl-wp' ) .
 				'</a></p>',
 		);

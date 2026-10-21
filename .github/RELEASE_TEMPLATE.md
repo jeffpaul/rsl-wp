@@ -59,15 +59,15 @@ This release has been tested with:
 
 ## Useful Links
 
-- **Documentation:** [README.md](https://github.com/jameswlepage/rsl-wp/blob/main/README.md)
+- **Documentation:** [README.md](https://github.com/jeffpaul/rsl-wp/blob/main/README.md)
 - **RSL Standard:** [rslstandard.org](https://rslstandard.org)
-- **Support:** [GitHub Issues](https://github.com/jameswlepage/rsl-wp/issues)
+- **Support:** [GitHub Issues](https://github.com/jeffpaul/rsl-wp/issues)
 - **WordPress.org:** [Plugin Directory](https://wordpress.org/plugins/rsl-licensing)
 
 ## Contributing
 
-Found a bug or want to contribute? Check out our [Contributing Guide](https://github.com/jameswlepage/rsl-wp/blob/main/CONTRIBUTING.md).
+Found a bug or want to contribute? Check out our [Contributing Guide](https://github.com/jeffpaul/rsl-wp/blob/main/CONTRIBUTING.md).
 
 ---
 
-**Full Changelog:** https://github.com/jameswlepage/rsl-wp/compare/v{PREVIOUS_VERSION}...v{VERSION}
+**Full Changelog:** https://github.com/jeffpaul/rsl-wp/compare/v{PREVIOUS_VERSION}...v{VERSION}

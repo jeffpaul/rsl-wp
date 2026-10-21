@@ -17,7 +17,7 @@ jobs:
   deploy:
     name: Deploy to WordPress.org
     runs-on: ubuntu-latest
-    if: github.repository == 'jameswlepage/rsl-wp' # Only run on main repo
+    if: github.repository == 'jeffpaul/rsl-wp' # Only run on main repo
     
     steps:
     - name: Checkout code

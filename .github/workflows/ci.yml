@@ -97,9 +97,9 @@ jobs:
 
     - name: Check WordPress Coding Standards
       run: |
-        # Install WordPress Coding Standards if available
+        # Install WordPress Coding Standards if available. Rules live in phpcs.xml.dist.
         if composer show | grep -q "wp-coding-standards"; then
-          vendor/bin/phpcs --standard=WordPress --extensions=php --ignore=vendor/ .
+          vendor/bin/phpcs
         else
           echo "WordPress Coding Standards not installed - skipping"
         fi

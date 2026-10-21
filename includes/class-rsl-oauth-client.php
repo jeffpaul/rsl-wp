@@ -202,7 +202,7 @@ class RSL_OAuth_Client {
 			}
 		}
 
-		return $clients ?: array();
+		return $clients ? $clients : array();
 	}
 
 	/**
@@ -340,7 +340,7 @@ class RSL_OAuth_Client {
 			array( '%d', '%d' )
 		);
 
-		return $result ?: 0;
+		return $result ? $result : 0;
 	}
 
 	/**
@@ -365,7 +365,7 @@ class RSL_OAuth_Client {
 			array( '%d', '%d' )
 		);
 
-		return $result ?: 0;
+		return $result ? $result : 0;
 	}
 
 	/**

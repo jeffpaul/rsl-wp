@@ -2,7 +2,7 @@
 
 ## Reporting Vulnerabilities
 
-Report security vulnerabilities privately via [GitHub Security Advisories](https://github.com/Jameswlepage/rsl-wp/security/advisories).
+Report security vulnerabilities privately via [GitHub Security Advisories](https://github.com/jeffpaul/rsl-wp/security/advisories).
 
 ## Data Storage
 

@@ -85,7 +85,8 @@ class RSL_Rate_Limiter {
 	public function add_rate_limit_headers( $endpoint, $client_id = null ) {
 		$key           = $this->get_rate_limit_key( $endpoint, $client_id );
 		$limit         = $this->get_rate_limit( $endpoint );
-		$current_count = get_transient( $key ) ?: 0;
+		$current_count = get_transient( $key );
+		$current_count = $current_count ? $current_count : 0;
 		$remaining     = max( 0, $limit - $current_count );
 		$window        = $this->get_time_window();
 
@@ -102,7 +103,7 @@ class RSL_Rate_Limiter {
 	 * @return string
 	 */
 	private function get_rate_limit_key( $endpoint, $client_id = null ) {
-		$identifier   = $client_id ?: $this->get_client_identifier();
+		$identifier   = $client_id ? $client_id : $this->get_client_identifier();
 		$window_start = floor( time() / 60 ) * 60; // Round to minute boundary
 
 		return sprintf( 'rsl_rate_limit_%s_%s_%d', $endpoint, md5( $identifier ), $window_start );
@@ -127,18 +128,15 @@ class RSL_Rate_Limiter {
 	 * @return string
 	 */
 	private function get_client_ip() {
-		// Check for IP from shared internet
 		if ( ! empty( $_SERVER['HTTP_CLIENT_IP'] ) ) {
+			// IP from shared internet.
 			return sanitize_text_field( wp_unslash( $_SERVER['HTTP_CLIENT_IP'] ) );
-		}
-		// Check for IP passed from proxy
-		elseif ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
-			// Can contain multiple IPs, use the first
+		} elseif ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+			// IP passed from a proxy. Can contain multiple IPs, use the first.
 			$ips = explode( ',', sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) );
 			return trim( $ips[0] );
-		}
-		// Check for IP from remote address
-		elseif ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
+		} elseif ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
+			// IP from the remote address.
 			return sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
 		}
 
@@ -206,7 +204,8 @@ class RSL_Rate_Limiter {
 	public function get_rate_limit_status( $endpoint, $client_id = null ) {
 		$key           = $this->get_rate_limit_key( $endpoint, $client_id );
 		$limit         = $this->get_rate_limit( $endpoint );
-		$current_count = get_transient( $key ) ?: 0;
+		$current_count = get_transient( $key );
+		$current_count = $current_count ? $current_count : 0;
 		$window        = $this->get_time_window();
 
 		return array(

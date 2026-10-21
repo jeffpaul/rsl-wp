@@ -80,6 +80,7 @@ jobs:
           --exclude='test-report.html' \
           --exclude='.phpunit*' \
           --exclude='phpunit.xml' \
+          --exclude='phpcs.xml*' \
           --exclude='composer.json' \
           --exclude='composer.lock' \
           --exclude='Makefile' \

@@ -76,7 +76,7 @@ class RSL_RSS {
 				<item>
 					<title><?php echo esc_html( $license['name'] ); ?></title>
 					<link><?php echo esc_url( $this->get_license_xml_url( $license['id'] ) ); ?></link>
-					<description><?php echo esc_html( $license['description'] ?: 'RSL License Configuration' ); ?></description>
+					<description><?php echo esc_html( $license['description'] ? $license['description'] : 'RSL License Configuration' ); ?></description>
 					<guid><?php echo esc_url( $this->get_license_xml_url( $license['id'] ) ); ?></guid>
 					<?php if ( ! empty( $license['updated_at'] ) ) : ?>
 					<pubDate><?php echo esc_html( gmdate( 'r', strtotime( $license['updated_at'] ) ) ); ?></pubDate>

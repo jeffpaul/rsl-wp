@@ -5,14 +5,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 $license_handler = new RSL_License();
 $is_edit         = ! empty( $license_data );
-$title           = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New License', 'rsl-wp' );
+$page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New License', 'rsl-wp' );
 ?>
 
 <div class="wrap">
 	<h1 class="wp-heading-inline">
 		<img src="<?php echo esc_url( RSL_PLUGIN_URL . 'admin/images/rsl-logo.png' ); ?>" 
 			alt="RSL" class="rsl-admin-icon">
-		<?php echo esc_html( $title ); ?>
+		<?php echo esc_html( $page_title ); ?>
 	</h1>
 	<a href="<?php echo esc_url( admin_url( 'admin.php?page=rsl-licenses' ) ); ?>" class="page-title-action">
 		<?php esc_html_e( 'View All Licenses', 'rsl-wp' ); ?>

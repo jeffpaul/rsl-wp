@@ -336,7 +336,11 @@ class RSL_Server {
 			$client_id = $auth_result['client_id'];
 		}
 
-		$client          = sanitize_text_field( $req->get_param( 'client' ) ) ?: $client_id ?: 'anonymous';
+		$client = sanitize_text_field( $req->get_param( 'client' ) );
+		if ( ! $client ) {
+			$client = $client_id ? $client_id : 'anonymous';
+		}
+
 		$resource        = esc_url_raw( $req->get_param( 'resource' ) ); // Resource parameter for validation
 		$create_checkout = filter_var( $req->get_param( 'create_checkout' ), FILTER_VALIDATE_BOOLEAN );
 		$order_key       = sanitize_text_field( $req->get_param( 'wc_order_key' ) ); // Woo order key flow
@@ -368,7 +372,7 @@ class RSL_Server {
 			}
 		}
 
-		$ptype = $license['payment_type'] ?: 'free';
+		$ptype = $license['payment_type'] ? $license['payment_type'] : 'free';
 
 		// Free license (amount = 0 or free/attribution type) → mint immediately
 		if ( $this->is_free_license( $license ) ) {
@@ -424,7 +428,7 @@ class RSL_Server {
 				return new \WP_Error( 'product_mismatch', 'Order does not contain the license product', array( 'status' => 403 ) );
 			}
 
-			$out = $this->mint_token_for_license( $license, $client ?: ( 'order:' . $order_id ) );
+			$out = $this->mint_token_for_license( $license, $client ? $client : ( 'order:' . $order_id ) );
 			$this->add_cors_headers();
 			$this->rate_limiter->add_rate_limit_headers( 'token', $client_id );
 			return rest_ensure_response( $out );
@@ -460,7 +464,7 @@ class RSL_Server {
 				return new \WP_Error( 'subscription_inactive', 'Subscription is not active', array( 'status' => 402 ) );
 			}
 
-			$out = $this->mint_token_for_license( $license, $client ?: ( 'subscription:' . $sub_id ) );
+			$out = $this->mint_token_for_license( $license, $client ? $client : ( 'subscription:' . $sub_id ) );
 			$this->add_cors_headers();
 			$this->rate_limiter->add_rate_limit_headers( 'token', $client_id );
 			return rest_ensure_response( $out );
@@ -640,7 +644,7 @@ class RSL_Server {
 		}
 
 		// Skip core/asset paths
-		$request_uri   = isset( $_SERVER['REQUEST_URI'] ) ? esc_url_raw( wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH ) ) : '';
+		$request_uri   = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH ) : '';
 		$wp_core_paths = array( '/wp-admin/', '/wp-login.php', '/wp-cron.php', '/xmlrpc.php', '/wp-json/', '/wp-content/', '/wp-includes/' );
 		foreach ( $wp_core_paths as $core_path ) {
 			if ( strpos( $request_uri, $core_path ) !== false ) {
@@ -830,7 +834,7 @@ class RSL_Server {
 
 		// Optional: ensure this URL is within the licensed pattern
 		$pattern     = isset( $payload['pattern'] ) ? $payload['pattern'] : '';
-		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? esc_url_raw( wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH ) ) : '';
+		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH ) : '';
 		if ( $pattern && ! $this->url_matches_pattern( home_url( $request_uri ), $pattern ) ) {
 			return false;
 		}
@@ -847,13 +851,13 @@ class RSL_Server {
 		$payload = array(
 			'iss'     => home_url(),
 			'aud'     => wp_parse_url( home_url(), PHP_URL_HOST ),
-			'sub'     => $client ?: 'anonymous',
+			'sub'     => $client ? $client : 'anonymous',
 			'jti'     => $jti,
 			'iat'     => $now,
 			'nbf'     => $now,
 			'exp'     => $now + $ttl,
 			'lic'     => intval( $license['id'] ),
-			'scope'   => $license['permits_usage'] ?: 'all',
+			'scope'   => $license['permits_usage'] ? $license['permits_usage'] : 'all',
 			'pattern' => $license['content_url'],
 		);
 
@@ -921,9 +925,9 @@ class RSL_Server {
 		$product->set_sold_individually( true );
 
 		// Price/currency
-		$amount     = floatval( $license['amount'] ?: 0 );
+		$amount     = floatval( $license['amount'] ? $license['amount'] : 0 );
 		$store_curr = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD';
-		if ( $amount > 0 && strtoupper( $license['currency'] ?: $store_curr ) !== $store_curr ) {
+		if ( $amount > 0 && strtoupper( $license['currency'] ? $license['currency'] : $store_curr ) !== $store_curr ) {
 			return new \WP_Error( 'currency_mismatch', 'Store currency does not match license currency' );
 		}
 		if ( $amount > 0 ) {
@@ -952,7 +956,7 @@ class RSL_Server {
 		status_header( 401 );
 
 		$authorization_uri = home_url( '.well-known/rsl/' );
-		$request_uri       = isset( $_SERVER['REQUEST_URI'] ) ? esc_url_raw( wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH ) ) : '';
+		$request_uri       = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH ) : '';
 		$current           = home_url( $request_uri );
 		$licenses          = $this->license_handler->get_licenses( array( 'active' => 1 ) );
 
@@ -1058,7 +1062,8 @@ class RSL_Server {
 		}
 
 		$license_id = intval( $req->get_param( 'license_id' ) );
-		$client     = sanitize_text_field( $req->get_param( 'client' ) ) ?: 'anonymous';
+		$client     = sanitize_text_field( $req->get_param( 'client' ) );
+		$client     = $client ? $client : 'anonymous';
 
 		$license = $this->license_handler->get_license( $license_id );
 		if ( ! $license || ! $license['active'] ) {
