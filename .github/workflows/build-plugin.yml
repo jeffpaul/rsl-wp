@@ -1,5 +1,8 @@
 name: Build Plugin ZIP
 
+permissions:
+  contents: write
+
 on:
   push:
     tags:
