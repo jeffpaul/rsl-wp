@@ -3,7 +3,7 @@
         'name' => 'jameswlepage/rsl-licensing',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => 'd587bba7ddf78d1dfd99202b40967af7641f8112',
+        'reference' => '7dc513395196d77153810cc839837e8e4555f518',
         'type' => 'wordpress-plugin',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -11,9 +11,9 @@
     ),
     'versions' => array(
         'firebase/php-jwt' => array(
-            'pretty_version' => 'v6.10.0',
-            'version' => '6.10.0.0',
-            'reference' => 'a49db6f0a5033aef5143295342f1c95521b075ff',
+            'pretty_version' => 'v7.2.1',
+            'version' => '7.2.1.0',
+            'reference' => '0501f5729b9e2448516674aff07c7d1727869b8e',
             'type' => 'library',
             'install_path' => __DIR__ . '/../firebase/php-jwt',
             'aliases' => array(),
@@ -22,7 +22,7 @@
         'jameswlepage/rsl-licensing' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => 'd587bba7ddf78d1dfd99202b40967af7641f8112',
+            'reference' => '7dc513395196d77153810cc839837e8e4555f518',
             'type' => 'wordpress-plugin',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

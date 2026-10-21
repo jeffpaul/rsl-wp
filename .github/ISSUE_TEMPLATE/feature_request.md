@@ -24,7 +24,7 @@ A clear and concise description of any alternative solutions or features you've 
 **Implementation Considerations**
 Please consider:
 - [ ] WordPress compatibility (5.0+)
-- [ ] PHP compatibility (7.4+)
+- [ ] PHP compatibility (8.0+)
 - [ ] Performance impact
 - [ ] Security implications
 - [ ] Database schema changes required

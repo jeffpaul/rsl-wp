@@ -38,7 +38,7 @@ Brief description of changes made.
 ## WordPress Compatibility
 - [ ] Follows WordPress coding standards
 - [ ] Compatible with WordPress 5.0+
-- [ ] Compatible with PHP 7.4+
+- [ ] Compatible with PHP 8.0+
 - [ ] Proper ABSPATH checks in all files
 - [ ] Text domain consistency maintained
 - [ ] No conflicts with common plugins tested

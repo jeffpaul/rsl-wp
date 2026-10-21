@@ -3,7 +3,7 @@
 ## System Requirements
 
 - WordPress 5.0+
-- PHP 7.4+  
+- PHP 8.0+  
 - MySQL 5.6+ (or MariaDB)
 - Web server with rewrite capability
 
