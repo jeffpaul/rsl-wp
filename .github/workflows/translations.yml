@@ -244,14 +244,14 @@ jobs:
         # WordPress automatically loads translations when Text Domain header is present
 
         # Check plugin header for text domain
-        if ! grep -q "Text Domain: $EXPECTED_DOMAIN" rsl-wp.php; then
+        if ! grep -Eq "Text Domain:[[:space:]]+$EXPECTED_DOMAIN" rsl-wp.php; then
           echo "❌ Plugin header missing or incorrect text domain"
           TRANSLATION_ISSUES=$((TRANSLATION_ISSUES + 1))
         fi
 
         # Check for WordPress.org readme text domain
         if [ -f "readme.txt" ]; then
-          if ! grep -q "Text Domain: $EXPECTED_DOMAIN" readme.txt; then
+          if ! grep -Eq "Text Domain:[[:space:]]+$EXPECTED_DOMAIN" readme.txt; then
             echo "⚠️ readme.txt missing text domain declaration"
           fi
         fi
