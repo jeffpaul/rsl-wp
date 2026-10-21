@@ -45,7 +45,7 @@
 
 This release has been tested with:
 - WordPress 5.0 - 6.4
-- PHP 7.4 - 8.3
+- PHP 8.0 - 8.3
 - WooCommerce 6.0+
 - Common WordPress themes and plugins
 - Security scanning and vulnerability assessment
