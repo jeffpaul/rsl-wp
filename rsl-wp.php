@@ -1,18 +1,17 @@
 <?php
 /**
- * Plugin Name: Really Simple Licensing
- * Plugin URI: https://github.com/jeffpaul/rsl-wp
- * Description: Complete Really Simple Licensing (RSL) support for WordPress sites. Define machine-readable licensing terms for your content, enabling AI companies and crawlers to properly license your digital assets.
- * Version: 0.0.5
- * Author: James W. LePage
- * Author URI: https://j.cv
- * License: GPL v2 or later
- * License URI: https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain: rsl-wp
- * Domain Path: /languages
+ * Plugin Name:       Really Simple Licensing
+ * Plugin URI:        https://github.com/jeffpaul/rsl-wp
+ * Description:       Complete Really Simple Licensing (RSL) support for WordPress sites. Define machine-readable licensing terms for your content, enabling AI companies and crawlers to properly license your digital assets.
+ * Version:           0.0.5
+ * Author:            James W. LePage, Jeffrey Paul
+ * License:           GPL v2 or later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain:       rsl-wp
+ * Domain Path:       /languages
  * Requires at least: 5.0
- * Tested up to: 6.4
- * Requires PHP: 7.4
+ * Tested up to:      6.4
+ * Requires PHP:      7.4
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
