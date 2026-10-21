@@ -10,6 +10,9 @@ on:
       - '**/*.php'
       - '.github/workflows/translations.yml'
 
+permissions:
+  contents: read
+
 jobs:
   translation-validation:
     name: Translation File Validation
