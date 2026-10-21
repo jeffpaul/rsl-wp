@@ -1,13 +1,13 @@
 === Really Simple Licensing ===
-Contributors: jameswlepage
-Donate link: https://github.com/sponsors/jameswlepage
-Tags: licensing, rsl, ai, content, copyright
+Contributors:      jameswlepage, jeffpaul
+Donate link:       https://github.com/sponsors/jeffpaul
+Tags:              licensing, rsl, ai, content, copyright
 Requires at least: 5.0
-Tested up to: 6.8
-Requires PHP: 7.4
-Stable tag: 0.0.5
-License: GPLv2 or later
-License URI: https://www.gnu.org/licenses/gpl-2.0.html
+Tested up to:      6.8
+Requires PHP:      7.4
+Stable tag:        0.0.5
+License:           GPLv2 or later
+License URI:       https://www.gnu.org/licenses/gpl-2.0.html
 
 Really Simple Licensing (RSL) support. Define machine-readable licensing terms for AI and automated systems.
 
