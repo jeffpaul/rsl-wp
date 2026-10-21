@@ -8,6 +8,11 @@ updates:
       day: "monday"
       time: "02:00"
     open-pull-requests-limit: 5
+    # One PR per week for dev tooling bumps; runtime deps (e.g. firebase/php-jwt) stay separate.
+    groups:
+      composer-dev:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
     commit-message:
       prefix: "deps"
       include: "scope"
@@ -25,6 +30,9 @@ updates:
       day: "monday"
       time: "02:00"
     open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns: ["*"]
     commit-message:
       prefix: "ci"
       include: "scope"

@@ -3,12 +3,8 @@ name: Build Plugin ZIP
 permissions:
   contents: write
 
+# Tagged releases are built and published by release.yml; this is for ad-hoc builds.
 on:
-  push:
-    tags:
-      - 'v*'
-  release:
-    types: [created]
   workflow_dispatch:
     inputs:
       version:

@@ -2,9 +2,25 @@ name: Continuous Integration
 
 on:
   push:
-    branches: [ main, develop, 'feature/**', 'fix/**', 'add/**' ]
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'languages/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - 'LICENSE'
   pull_request:
     branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'languages/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - 'LICENSE'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -106,9 +122,6 @@ jobs:
         else
           echo "WordPress Coding Standards not installed - skipping"
         fi
-
-    - name: Check for security vulnerabilities
-      run: composer audit || true # Don't fail on security warnings for now
 
     - name: Validate composer.json
       run: composer validate --strict

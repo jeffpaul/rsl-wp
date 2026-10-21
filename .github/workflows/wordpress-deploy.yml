@@ -80,78 +80,78 @@ jobs:
         if [ ! -f readme.txt ]; then
           echo "Creating readme.txt for WordPress.org..."
           cat > readme.txt << 'EOF'
-=== RSL for WordPress ===
-Contributors: jameswlepage
-Tags: licensing, rsl, ai-licensing, content-licensing, machine-readable, oauth, jwt
-Requires at least: 5.0
-Tested up to: 6.4
-Requires PHP: 7.4
-Stable tag: $VERSION
-License: GPL v2 or later
-License URI: https://www.gnu.org/licenses/gpl-2.0.html
+        === RSL for WordPress ===
+        Contributors: jameswlepage
+        Tags: licensing, rsl, ai-licensing, content-licensing, machine-readable, oauth, jwt
+        Requires at least: 5.0
+        Tested up to: 6.4
+        Requires PHP: 8.0
+        Stable tag: $VERSION
+        License: GPL v2 or later
+        License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Complete Really Simple Licensing (RSL) support for WordPress sites. Define machine-readable licensing terms for your content, enabling AI companies, crawlers, and other automated systems to properly license your digital assets.
+        Complete Really Simple Licensing (RSL) support for WordPress sites. Define machine-readable licensing terms for your content, enabling AI companies, crawlers, and other automated systems to properly license your digital assets.
 
-== Description ==
+        == Description ==
 
-RSL for WordPress provides comprehensive Really Simple Licensing (RSL) support with built-in OAuth 2.0 license server functionality. Perfect for content creators who want to define clear, machine-readable licensing terms for AI training, web crawling, and automated content usage.
+        RSL for WordPress provides comprehensive Really Simple Licensing (RSL) support with built-in OAuth 2.0 license server functionality. Perfect for content creators who want to define clear, machine-readable licensing terms for AI training, web crawling, and automated content usage.
 
-= Key Features =
+        = Key Features =
 
-* **Full RSL 1.0 Specification Support** - Complete implementation of the official RSL standard
-* **OAuth 2.0 License Server** - Built-in authentication and token management
-* **Multiple Integration Methods** - HTML head, HTTP headers, robots.txt, RSS feeds
-* **WooCommerce Integration** - Automated payment processing for paid licenses
-* **Professional Admin Interface** - Visual license builder with live XML generation
-* **Security Features** - Rate limiting, JWT tokens, crawler authentication
-* **Developer API** - REST endpoints and WordPress Abilities API integration
+        * **Full RSL 1.0 Specification Support** - Complete implementation of the official RSL standard
+        * **OAuth 2.0 License Server** - Built-in authentication and token management
+        * **Multiple Integration Methods** - HTML head, HTTP headers, robots.txt, RSS feeds
+        * **WooCommerce Integration** - Automated payment processing for paid licenses
+        * **Professional Admin Interface** - Visual license builder with live XML generation
+        * **Security Features** - Rate limiting, JWT tokens, crawler authentication
+        * **Developer API** - REST endpoints and WordPress Abilities API integration
 
-= License Types Supported =
+        = License Types Supported =
 
-* **Free Content** - Open access with usage restrictions
-* **Paid Licensing** - One-time purchase or subscription models  
-* **Attribution Required** - Creative Commons integration
-* **AI Training Controls** - Granular AI usage permissions
-* **Geographic Restrictions** - Country/region-based licensing
+        * **Free Content** - Open access with usage restrictions
+        * **Paid Licensing** - One-time purchase or subscription models  
+        * **Attribution Required** - Creative Commons integration
+        * **AI Training Controls** - Granular AI usage permissions
+        * **Geographic Restrictions** - Country/region-based licensing
 
-= Payment Processing =
+        = Payment Processing =
 
-* **WooCommerce Integration** - Supports all WooCommerce payment gateways
-* **OAuth 2.0 Authentication** - Secure client credential authentication
-* **Automatic Token Management** - JWT-based tokens with expiration
-* **Refund Protection** - Automatic token revocation on refunds/cancellations
+        * **WooCommerce Integration** - Supports all WooCommerce payment gateways
+        * **OAuth 2.0 Authentication** - Secure client credential authentication
+        * **Automatic Token Management** - JWT-based tokens with expiration
+        * **Refund Protection** - Automatic token revocation on refunds/cancellations
 
-== Installation ==
+        == Installation ==
 
-1. Upload the plugin files to `/wp-content/plugins/rsl-licensing/`
-2. Activate the plugin through the 'Plugins' menu in WordPress
-3. Navigate to 'RSL Licensing' in your admin menu to configure
-4. Create your first license and set global licensing preferences
+        1. Upload the plugin files to `/wp-content/plugins/rsl-licensing/`
+        2. Activate the plugin through the 'Plugins' menu in WordPress
+        3. Navigate to 'RSL Licensing' in your admin menu to configure
+        4. Create your first license and set global licensing preferences
 
-== Frequently Asked Questions ==
+        == Frequently Asked Questions ==
 
-= Is this compatible with existing copyright notices? =
+        = Is this compatible with existing copyright notices? =
 
-Yes! RSL complements traditional copyright notices by making them machine-readable.
+        Yes! RSL complements traditional copyright notices by making them machine-readable.
 
-= Can I use this with Creative Commons licenses? =
+        = Can I use this with Creative Commons licenses? =
 
-Absolutely! RSL supports standard license references including Creative Commons.
+        Absolutely! RSL supports standard license references including Creative Commons.
 
-= Does this work with caching plugins? =
+        = Does this work with caching plugins? =
 
-Yes, RSL works with caching plugins since licensing information is embedded during page generation.
+        Yes, RSL works with caching plugins since licensing information is embedded during page generation.
 
-== Changelog ==
+        == Changelog ==
 
-= $VERSION =
-* See GitHub releases for detailed changelog
+        = $VERSION =
+        * See GitHub releases for detailed changelog
 
-== Upgrade Notice ==
+        == Upgrade Notice ==
 
-= $VERSION =
-Latest release with enhanced features and security improvements.
-EOF
+        = $VERSION =
+        Latest release with enhanced features and security improvements.
+        EOF
           sed -i "s/\$VERSION/$VERSION/g" readme.txt
         fi
 
