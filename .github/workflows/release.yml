@@ -15,7 +15,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
@@ -38,7 +38,7 @@ jobs:
         echo "Coverage report generated"
 
     - name: Upload coverage
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v7
       with:
         file: ./coverage.xml
 
@@ -51,7 +51,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
@@ -232,7 +232,7 @@ jobs:
         EOF
 
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3
       with:
         name: "RSL for WordPress v${{ steps.version.outputs.version }}"
         files: |
@@ -251,7 +251,7 @@ jobs:
 
     - name: Trigger WordPress.org deployment
       if: "!contains(steps.version.outputs.version, '-')" # Only for stable releases
-      uses: peter-evans/repository-dispatch@v2
+      uses: peter-evans/repository-dispatch@v4
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         event-type: wordpress-deploy

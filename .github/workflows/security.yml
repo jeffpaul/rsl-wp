@@ -33,7 +33,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
@@ -41,7 +41,7 @@ jobs:
         php-version: '8.1'
 
     - name: Cache Composer packages
-      uses: actions/cache@v3
+      uses: actions/cache@v6
       with:
         path: vendor
         key: ${{ runner.os }}-php-8.1-${{ hashFiles('**/composer.lock') }}
@@ -61,7 +61,7 @@ jobs:
         fi
 
     - name: Upload security test results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: security-test-results
@@ -79,7 +79,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Run Snyk to check for vulnerabilities
       if: env.SNYK_TOKEN != ''
@@ -89,7 +89,7 @@ jobs:
         args: --severity-threshold=high --sarif-file-output=snyk.sarif
 
     - name: Upload Snyk results to GitHub
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       if: always() && hashFiles('snyk.sarif') != ''
       with:
         sarif_file: snyk.sarif
@@ -100,7 +100,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
@@ -109,7 +109,7 @@ jobs:
         tools: psalm, phpstan
 
     - name: Cache analysis tools
-      uses: actions/cache@v3
+      uses: actions/cache@v6
       with:
         path: |
           ~/.composer/cache
@@ -151,7 +151,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Check for common security issues
       run: |
