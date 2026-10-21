@@ -34,7 +34,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
@@ -115,7 +115,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
@@ -225,7 +225,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Check WordPress i18n best practices
       run: |
@@ -281,7 +281,7 @@ jobs:
         fi
 
     - name: Upload translation analysis
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: translation-analysis
