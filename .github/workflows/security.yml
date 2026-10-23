@@ -74,17 +74,20 @@ jobs:
       contents: read
       security-events: write
     # Secrets aren't passed to Dependabot runs, so Snyk steps skip when the token is absent.
+    # Only a presence flag is job-wide; the token itself is scoped to the Snyk step.
     env:
-      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-    
+      HAS_SNYK_TOKEN: ${{ secrets.SNYK_TOKEN != '' }}
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v7
 
     - name: Run Snyk to check for vulnerabilities
-      if: env.SNYK_TOKEN != ''
-      uses: snyk/actions/php@master
+      if: env.HAS_SNYK_TOKEN == 'true'
+      uses: snyk/actions/php@v1.0.0
       continue-on-error: true
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       with:
         args: --severity-threshold=high --sarif-file-output=snyk.sarif
 
