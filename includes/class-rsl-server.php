@@ -6,6 +6,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class RSL_Server {
 
+	/**
+	 * Value of the 'typ' claim carried by license access tokens.
+	 */
+	const LICENSE_TOKEN_TYPE = 'rsl_license';
+
 	private $license_handler;
 	private $payment_registry;
 	private $session_manager;
@@ -38,6 +43,10 @@ class RSL_Server {
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'handle_wc_order_cancelled' ) );
 		add_action( 'woocommerce_subscription_status_cancelled', array( $this, 'handle_wc_subscription_cancelled' ) );
 		add_action( 'woocommerce_subscription_status_expired', array( $this, 'handle_wc_subscription_expired' ) );
+
+		// Bind WooCommerce orders created from a token-endpoint checkout to the requesting RSL client
+		add_filter( 'woocommerce_add_cart_item_data', array( $this, 'capture_checkout_reference' ), 10, 2 );
+		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'persist_checkout_client' ), 10, 4 );
 	}
 
 	public function add_rewrite_rules() {
@@ -103,10 +112,10 @@ class RSL_Server {
 			exit;
 		}
 
-		// Validate the license token
+		// Validate the license token against the license(s) gating this URL
 		$token = $this->extract_license_token( $auth_header );
 
-		if ( ! $this->validate_license_token( $token ) ) {
+		if ( ! $this->validate_license_token( $token, $this->get_gated_licenses_for_request() ) ) {
 			$this->send_invalid_license_response();
 			exit;
 		}
@@ -337,8 +346,11 @@ class RSL_Server {
 		}
 
 		$client = sanitize_text_field( $req->get_param( 'client' ) );
-		if ( ! $client ) {
-			$client = $client_id ? $client_id : 'anonymous';
+		if ( $requires_auth ) {
+			// Paid licenses: the token subject is always the authenticated client.
+			$client = $client_id;
+		} elseif ( ! $client ) {
+			$client = 'anonymous';
 		}
 
 		$resource        = esc_url_raw( $req->get_param( 'resource' ) ); // Resource parameter for validation
@@ -399,6 +411,11 @@ class RSL_Server {
 				$url = wc_get_checkout_url();
 				// Add-to-cart param keeps it simple; cart must be empty ideally
 				$url = add_query_arg( array( 'add-to-cart' => $product_id ), $url );
+				// Tie the resulting order to the authenticated client so only it can redeem the order
+				$checkout_ref = $this->create_checkout_reference( $client_id, $license, $product_id );
+				if ( $checkout_ref ) {
+					$url = add_query_arg( array( 'rsl_checkout_ref' => $checkout_ref ), $url );
+				}
 				$this->add_cors_headers();
 				return rest_ensure_response( array( 'checkout_url' => esc_url_raw( $url ) ) );
 			}
@@ -418,17 +435,23 @@ class RSL_Server {
 			}
 
 			// Verify the product is in the order
-			$ok = false;
-			foreach ( $order->get_items() as $item ) {
-				if ( (int) $item->get_product_id() === (int) $product_id ) {
-					$ok = true;
-					break; }
-			}
-			if ( ! $ok ) {
+			$order_item = $this->find_order_item_for_product( $order, $product_id );
+			if ( ! $order_item ) {
 				return new \WP_Error( 'product_mismatch', 'Order does not contain the license product', array( 'status' => 403 ) );
 			}
 
-			$out = $this->mint_token_for_license( $license, $client ? $client : ( 'order:' . $order_id ) );
+			// Verify the order belongs to the authenticated client
+			if ( ! $this->verify_order_client( $order, $order_item, $client_id, $license, $product_id ) ) {
+				return new \WP_Error( 'order_client_mismatch', 'Order was not purchased by this client', array( 'status' => 403 ) );
+			}
+
+			// Verify what was actually paid
+			$paid = $this->verify_order_payment( $order, $order_item, $license );
+			if ( is_wp_error( $paid ) ) {
+				return $paid;
+			}
+
+			$out = $this->mint_token_for_license( $license, $client ? $client : ( 'order:' . $order_id ), array( 'order_id' => $order_id ) );
 			$this->add_cors_headers();
 			$this->rate_limiter->add_rate_limit_headers( 'token', $client_id );
 			return rest_ensure_response( $out );
@@ -447,6 +470,11 @@ class RSL_Server {
 			if ( $create_checkout ) {
 				$url = wc_get_checkout_url();
 				$url = add_query_arg( array( 'add-to-cart' => $product_id ), $url );
+				// Tie the resulting subscription to the authenticated client
+				$checkout_ref = $this->create_checkout_reference( $client_id, $license, $product_id );
+				if ( $checkout_ref ) {
+					$url = add_query_arg( array( 'rsl_checkout_ref' => $checkout_ref ), $url );
+				}
 				$this->add_cors_headers();
 				return rest_ensure_response( array( 'checkout_url' => esc_url_raw( $url ) ) );
 			}
@@ -464,7 +492,23 @@ class RSL_Server {
 				return new \WP_Error( 'subscription_inactive', 'Subscription is not active', array( 'status' => 402 ) );
 			}
 
-			$out = $this->mint_token_for_license( $license, $client ? $client : ( 'subscription:' . $sub_id ) );
+			$subscription_item = $this->find_order_item_for_product( $subscription, $product_id );
+			if ( ! $subscription_item ) {
+				return new \WP_Error( 'subscription_mismatch', 'Subscription does not cover this license', array( 'status' => 403 ) );
+			}
+
+			// Verify the subscription belongs to the authenticated client (subscription or parent order)
+			if ( ! $this->verify_order_client( $subscription, $subscription_item, $client_id, $license, $product_id ) ) {
+				return new \WP_Error( 'subscription_client_mismatch', 'Subscription was not purchased by this client', array( 'status' => 403 ) );
+			}
+
+			// Verify the recurring amount and currency
+			$paid = $this->verify_order_payment( $subscription, $subscription_item, $license );
+			if ( is_wp_error( $paid ) ) {
+				return $paid;
+			}
+
+			$out = $this->mint_token_for_license( $license, $client ? $client : ( 'subscription:' . $sub_id ), array( 'subscription_id' => $sub_id ) );
 			$this->add_cors_headers();
 			$this->rate_limiter->add_rate_limit_headers( 'token', $client_id );
 			return rest_ensure_response( $out );
@@ -504,16 +548,8 @@ class RSL_Server {
 			return rest_ensure_response( array( 'active' => false ) );
 		}
 
-		$now = time();
-
-		// Check expiration
-		if ( ! empty( $payload['exp'] ) && $now > intval( $payload['exp'] ) ) {
-			$this->add_cors_headers();
-			return rest_ensure_response( array( 'active' => false ) );
-		}
-
-		// Check if token is revoked (if jti claim exists)
-		if ( ! empty( $payload['jti'] ) && $this->oauth_client->is_token_revoked( $payload['jti'] ) ) {
+		// Check type, issuer, audience, expiry and revocation
+		if ( ! $this->verify_license_token_claims( $payload ) ) {
 			$this->add_cors_headers();
 			return rest_ensure_response( array( 'active' => false ) );
 		}
@@ -638,9 +674,18 @@ class RSL_Server {
 	}
 
 	private function requires_license_auth() {
+		return ! empty( $this->get_gated_licenses_for_request() );
+	}
+
+	/**
+	 * Get the active licenses with a server_url that gate the current request.
+	 *
+	 * @return array Matching licenses (empty when no license auth is required).
+	 */
+	private function get_gated_licenses_for_request() {
 		// Never for admins
 		if ( is_admin() || current_user_can( 'manage_options' ) ) {
-			return false;
+			return array();
 		}
 
 		// Skip core/asset paths
@@ -648,24 +693,25 @@ class RSL_Server {
 		$wp_core_paths = array( '/wp-admin/', '/wp-login.php', '/wp-cron.php', '/xmlrpc.php', '/wp-json/', '/wp-content/', '/wp-includes/' );
 		foreach ( $wp_core_paths as $core_path ) {
 			if ( strpos( $request_uri, $core_path ) !== false ) {
-				return false;
+				return array();
 			}
 		}
 
 		// Only challenge probable crawlers
 		if ( ! $this->is_crawler_request() ) {
-			return false;
+			return array();
 		}
 
 		// Require auth if a license with server_url matches the current request
 		$current_url = home_url( $request_uri );
 		$licenses    = $this->license_handler->get_licenses( array( 'active' => 1 ) );
+		$gated       = array();
 		foreach ( $licenses as $license ) {
 			if ( ! empty( $license['server_url'] ) && $this->url_matches_pattern( $current_url, $license['content_url'] ) ) {
-				return true;
+				$gated[] = $license;
 			}
 		}
-		return false;
+		return $gated;
 	}
 
 	private function get_authorization_header() {
@@ -740,9 +786,8 @@ class RSL_Server {
 
 	private function is_free_license( $license ) {
 		$amount = floatval( $license['amount'] ?? 0 );
-		$type   = $license['payment_type'] ?? 'free';
-		// Free if amount is 0 OR explicitly free/attribution type
-		return $amount === 0.0 || in_array( $type, array( 'free', 'attribution' ), true );
+		// Free only if amount is 0; payment_type alone never makes a priced license free
+		return $amount === 0.0;
 	}
 
 	// ===== JWT Secret Management =====
@@ -816,30 +861,87 @@ class RSL_Server {
 		return $payload;
 	}
 
-	private function validate_license_token( $token ) {
+	/**
+	 * Verify the claims every license token issued by this site must carry.
+	 *
+	 * @param array $payload Decoded, signature-verified JWT payload.
+	 * @return bool
+	 */
+	private function verify_license_token_claims( $payload ) {
+		if ( ! is_array( $payload ) ) {
+			return false;
+		}
+
+		// Must be a license token (not e.g. a payment proof signed with the same secret)
+		if ( ( $payload['typ'] ?? '' ) !== self::LICENSE_TOKEN_TYPE ) {
+			return false;
+		}
+
+		// Issuer must be this site
+		if ( ( $payload['iss'] ?? '' ) !== home_url() ) {
+			return false;
+		}
+
+		// Audience must be this host
+		$host = wp_parse_url( home_url(), PHP_URL_HOST );
+		if ( empty( $payload['aud'] ) || $payload['aud'] !== $host ) {
+			return false;
+		}
+
+		$now = time();
+		if ( empty( $payload['exp'] ) || $now > intval( $payload['exp'] ) ) {
+			return false;
+		}
+		if ( ! empty( $payload['nbf'] ) && $now < intval( $payload['nbf'] ) ) {
+			return false;
+		}
+
+		// Must carry a jti that has not been revoked
+		if ( empty( $payload['jti'] ) || ! is_string( $payload['jti'] ) || $this->oauth_client->is_token_revoked( $payload['jti'] ) ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Validate a license token for the current request.
+	 *
+	 * @param string $token            Raw JWT.
+	 * @param array  $gated_licenses   Licenses gating the current URL; the token's
+	 *                                 lic claim must match one of them.
+	 * @return bool
+	 */
+	private function validate_license_token( $token, $gated_licenses = array() ) {
 		$payload = $this->jwt_decode_token( $token );
 		if ( is_wp_error( $payload ) ) {
 			return false;
 		}
-		$now = time();
-		if ( ! empty( $payload['nbf'] ) && $now < intval( $payload['nbf'] ) ) {
-			return false;
-		}
-		if ( ! empty( $payload['exp'] ) && $now > intval( $payload['exp'] ) ) {
+
+		if ( ! $this->verify_license_token_claims( $payload ) ) {
 			return false;
 		}
 
-		// Audience should be this host
-		$aud  = isset( $payload['aud'] ) ? $payload['aud'] : '';
-		$host = wp_parse_url( home_url(), PHP_URL_HOST );
-		if ( $aud && $aud !== $host ) {
+		// Token must be issued for a license that gates this URL
+		if ( ! isset( $payload['lic'] ) ) {
+			return false;
+		}
+		$lic     = (int) $payload['lic'];
+		$matched = false;
+		foreach ( (array) $gated_licenses as $license ) {
+			if ( isset( $license['id'] ) && (int) $license['id'] === $lic ) {
+				$matched = true;
+				break;
+			}
+		}
+		if ( ! $matched ) {
 			return false;
 		}
 
-		// Optional: ensure this URL is within the licensed pattern
+		// Ensure this URL is within the licensed pattern
 		$pattern     = isset( $payload['pattern'] ) ? $payload['pattern'] : '';
 		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH ) : '';
-		if ( $pattern && ! $this->url_matches_pattern( home_url( $request_uri ), $pattern ) ) {
+		if ( ! $pattern || ! is_string( $pattern ) || ! $this->url_matches_pattern( home_url( $request_uri ), $pattern ) ) {
 			return false;
 		}
 		return true;
@@ -853,6 +955,7 @@ class RSL_Server {
 		$jti = $this->oauth_client->generate_jti();
 
 		$payload = array(
+			'typ'     => self::LICENSE_TOKEN_TYPE,
 			'iss'     => home_url(),
 			'aud'     => wp_parse_url( home_url(), PHP_URL_HOST ),
 			'sub'     => $client ? $client : 'anonymous',
@@ -871,7 +974,7 @@ class RSL_Server {
 		if ( ! $this->is_free_license( $license ) || isset( $metadata['track_token'] ) ) {
 			$this->oauth_client->store_token(
 				$jti,
-				is_string( $client ) && strpos( $client, '_' ) !== false ? $client : 'anonymous',
+				$client ? (string) $client : 'anonymous',
 				intval( $license['id'] ),
 				$payload['exp'],
 				$metadata
@@ -895,11 +998,21 @@ class RSL_Server {
 		}
 
 		$license_id = intval( $license['id'] );
+
+		// Price/currency must match the store, also when reusing an existing product
+		$amount     = floatval( $license['amount'] ? $license['amount'] : 0 );
+		$store_curr = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD';
+		if ( $amount > 0 && strtoupper( $license['currency'] ? $license['currency'] : $store_curr ) !== $store_curr ) {
+			return new \WP_Error( 'currency_mismatch', 'Store currency does not match license currency' );
+		}
+
 		// Try cache first for existing product
 		$cache_key         = 'rsl_wc_product_' . $license_id;
 		$cached_product_id = wp_cache_get( $cache_key, 'rsl_wc_products' );
 
 		if ( $cached_product_id !== false && get_post_status( $cached_product_id ) === 'publish' ) {
+			// Keep the product price in sync with later license edits
+			self::sync_wc_product_price( $cached_product_id, $license );
 			return intval( $cached_product_id );
 		}
 
@@ -916,6 +1029,7 @@ class RSL_Server {
 		);
 		if ( $q->have_posts() ) {
 			$product_id = intval( $q->posts[0] );
+			self::sync_wc_product_price( $product_id, $license );
 			// Cache the product ID for 1 hour
 			wp_cache_set( $cache_key, $product_id, 'rsl_wc_products', 3600 );
 			return $product_id;
@@ -928,12 +1042,7 @@ class RSL_Server {
 		$product->set_virtual( true );
 		$product->set_sold_individually( true );
 
-		// Price/currency
-		$amount     = floatval( $license['amount'] ? $license['amount'] : 0 );
-		$store_curr = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD';
-		if ( $amount > 0 && strtoupper( $license['currency'] ? $license['currency'] : $store_curr ) !== $store_curr ) {
-			return new \WP_Error( 'currency_mismatch', 'Store currency does not match license currency' );
-		}
+		// Price (currency checked above)
 		if ( $amount > 0 ) {
 			$product->set_regular_price( $amount );
 			$product->set_price( $amount );
@@ -955,6 +1064,214 @@ class RSL_Server {
 
 		return $product_id;
 	}
+
+	/**
+	 * Keep an RSL license product's price in sync with the license amount.
+	 *
+	 * Products are created once and reused, so license price edits must be
+	 * pushed to the product or checkout keeps charging the old price.
+	 *
+	 * @param int   $product_id WooCommerce product ID.
+	 * @param array $license    License data.
+	 */
+	public static function sync_wc_product_price( $product_id, array $license ) {
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return;
+		}
+
+		$product = wc_get_product( $product_id );
+		if ( ! $product ) {
+			return;
+		}
+
+		$decimals = function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2;
+		$amount   = round( floatval( $license['amount'] ?? 0 ), $decimals );
+
+		if ( round( (float) $product->get_regular_price(), $decimals ) === $amount
+			&& round( (float) $product->get_price(), $decimals ) === $amount ) {
+			return;
+		}
+
+		$product->set_regular_price( $amount );
+		$product->set_sale_price( '' );
+		$product->set_price( $amount );
+		if ( $product->is_type( array( 'subscription', 'variable-subscription' ) ) ) {
+			$product->update_meta_data( '_subscription_price', $amount );
+		}
+		$product->save();
+	}
+
+	// ===== Paid entitlement verification =====
+
+	/**
+	 * Create an opaque reference that carries the authenticated client through the browser checkout.
+	 *
+	 * @param string|null $client_id  Authenticated OAuth client ID.
+	 * @param array       $license    License data.
+	 * @param int         $product_id WooCommerce product ID.
+	 * @return string Reference, or empty string when there is no authenticated client.
+	 */
+	private function create_checkout_reference( $client_id, array $license, $product_id ) {
+		if ( ! $client_id ) {
+			return '';
+		}
+
+		$ref = strtolower( wp_generate_password( 40, false, false ) );
+		set_transient(
+			'rsl_checkout_ref_' . $ref,
+			array(
+				'client_id'  => (string) $client_id,
+				'license_id' => intval( $license['id'] ),
+				'product_id' => intval( $product_id ),
+			),
+			DAY_IN_SECONDS
+		);
+
+		return $ref;
+	}
+
+	/**
+	 * Attach the RSL client from a checkout reference to the cart item when the license product is added.
+	 *
+	 * @param array $cart_item_data Cart item data.
+	 * @param int   $product_id     Product being added.
+	 * @return array
+	 */
+	public function capture_checkout_reference( $cart_item_data, $product_id ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- opaque server-issued reference, not a state-changing action
+		if ( empty( $_GET['rsl_checkout_ref'] ) ) {
+			return $cart_item_data;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$ref  = sanitize_key( wp_unslash( $_GET['rsl_checkout_ref'] ) );
+		$data = $ref ? get_transient( 'rsl_checkout_ref_' . $ref ) : false;
+		if ( ! is_array( $data ) || empty( $data['client_id'] ) || intval( $data['product_id'] ) !== intval( $product_id ) ) {
+			return $cart_item_data;
+		}
+
+		$cart_item_data['rsl_client_id']  = $data['client_id'];
+		$cart_item_data['rsl_license_id'] = intval( $data['license_id'] );
+
+		return $cart_item_data;
+	}
+
+	/**
+	 * Persist the RSL client on the order line item and order when checkout creates the order.
+	 *
+	 * @param WC_Order_Item_Product $item          Order line item.
+	 * @param string                $cart_item_key Cart item key.
+	 * @param array                 $values        Cart item values.
+	 * @param WC_Order|null         $order         Order being created.
+	 */
+	public function persist_checkout_client( $item, $cart_item_key, $values, $order = null ) {
+		if ( empty( $values['rsl_client_id'] ) ) {
+			return;
+		}
+
+		$item->add_meta_data( '_rsl_client_id', $values['rsl_client_id'], true );
+		$item->add_meta_data( '_rsl_license_id', intval( $values['rsl_license_id'] ), true );
+		if ( $order ) {
+			$order->update_meta_data( '_rsl_client_id', $values['rsl_client_id'] );
+		}
+	}
+
+	/**
+	 * Find the line item for a product in an order or subscription.
+	 *
+	 * @param WC_Order $order      Order or subscription.
+	 * @param int      $product_id Product ID.
+	 * @return WC_Order_Item_Product|null
+	 */
+	private function find_order_item_for_product( $order, $product_id ) {
+		foreach ( $order->get_items() as $item ) {
+			if ( (int) $item->get_product_id() === (int) $product_id ) {
+				return $item;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Read the RSL client an order (or its line item) was purchased for.
+	 *
+	 * @param WC_Order                   $order Order or subscription.
+	 * @param WC_Order_Item_Product|null $item  Matching line item.
+	 * @return string Client ID or empty string.
+	 */
+	private function get_order_bound_client( $order, $item = null ) {
+		$bound = $item ? (string) $item->get_meta( '_rsl_client_id' ) : '';
+		if ( '' === $bound ) {
+			$bound = (string) $order->get_meta( '_rsl_client_id' );
+		}
+		return $bound;
+	}
+
+	/**
+	 * Verify that an order or subscription was purchased for the authenticated client.
+	 *
+	 * Strict by default: orders without a recorded client (e.g. created outside the
+	 * token endpoint checkout) are rejected. Site owners can relax or extend this
+	 * with the 'rsl_verify_order_client' filter.
+	 *
+	 * @param WC_Order                   $order      Order or subscription.
+	 * @param WC_Order_Item_Product|null $item       Matching line item.
+	 * @param string|null                $client_id  Authenticated OAuth client ID.
+	 * @param array                      $license    License data.
+	 * @param int                        $product_id License product ID.
+	 * @return bool
+	 */
+	private function verify_order_client( $order, $item, $client_id, array $license, $product_id ) {
+		$bound = $this->get_order_bound_client( $order, $item );
+
+		// Subscriptions: fall back to the parent order created at checkout
+		if ( '' === $bound && is_callable( array( $order, 'get_parent' ) ) ) {
+			$parent = $order->get_parent();
+			if ( $parent ) {
+				$bound = $this->get_order_bound_client( $parent, $this->find_order_item_for_product( $parent, $product_id ) );
+			}
+		}
+
+		$verified = '' !== $bound && '' !== (string) $client_id && hash_equals( $bound, (string) $client_id );
+
+		/**
+		 * Filter whether an order/subscription may be redeemed by the authenticated client.
+		 *
+		 * @param bool        $verified     Result of the strict client check.
+		 * @param WC_Order    $order        Order or subscription being redeemed.
+		 * @param string|null $client_id    Authenticated OAuth client ID.
+		 * @param array       $license      License data.
+		 * @param string      $bound_client Client ID recorded on the order, or empty string.
+		 */
+		return (bool) apply_filters( 'rsl_verify_order_client', $verified, $order, $client_id, $license, $bound );
+	}
+
+	/**
+	 * Verify the order paid at least the license amount in the license currency.
+	 *
+	 * @param WC_Order              $order   Order or subscription.
+	 * @param WC_Order_Item_Product $item    Matching line item.
+	 * @param array                 $license License data.
+	 * @return true|WP_Error
+	 */
+	private function verify_order_payment( $order, $item, array $license ) {
+		$decimals   = function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2;
+		$amount     = round( floatval( $license['amount'] ?? 0 ), $decimals );
+		$store_curr = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD';
+		$currency   = strtoupper( ! empty( $license['currency'] ) ? $license['currency'] : $store_curr );
+
+		if ( strtoupper( (string) $order->get_currency() ) !== $currency ) {
+			return new \WP_Error( 'currency_mismatch', 'Order currency does not match license currency', array( 'status' => 402 ) );
+		}
+
+		$line_total = round( (float) $item->get_total(), $decimals );
+		if ( $amount <= 0 || $line_total <= 0 || $line_total < $amount ) {
+			return new \WP_Error( 'insufficient_payment', 'Order amount does not cover the license price', array( 'status' => 402 ) );
+		}
+
+		return true;
+	}
+
 
 	private function send_license_required_response() {
 		status_header( 401 );

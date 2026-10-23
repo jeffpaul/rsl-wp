@@ -187,6 +187,7 @@ class RSL_WooCommerce_Processor implements RSL_Payment_Processor_Interface {
 		$cached_product_id = wp_cache_get( $cache_key, 'rsl_wc_products' );
 
 		if ( $cached_product_id !== false && get_post_status( $cached_product_id ) === 'publish' ) {
+			$this->sync_product_price( $cached_product_id, $license );
 			return intval( $cached_product_id );
 		}
 
@@ -204,6 +205,7 @@ class RSL_WooCommerce_Processor implements RSL_Payment_Processor_Interface {
 
 		if ( $existing_query->have_posts() ) {
 			$product_id = intval( $existing_query->posts[0] );
+			$this->sync_product_price( $product_id, $license );
 			// Cache the product ID for 1 hour
 			wp_cache_set( $cache_key, $product_id, 'rsl_wc_products', 3600 );
 			return $product_id;
@@ -252,6 +254,18 @@ class RSL_WooCommerce_Processor implements RSL_Payment_Processor_Interface {
 		wp_cache_set( $cache_key, $product_id, 'rsl_wc_products', 3600 );
 
 		return $product_id;
+	}
+
+	/**
+	 * Keep a reused license product's price in sync with the current license amount
+	 *
+	 * @param int   $product_id
+	 * @param array $license
+	 */
+	private function sync_product_price( $product_id, $license ) {
+		if ( class_exists( 'RSL_Server' ) ) {
+			RSL_Server::sync_wc_product_price( $product_id, $license );
+		}
 	}
 
 	/**

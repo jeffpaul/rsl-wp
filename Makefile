@@ -68,35 +68,7 @@ zip: ## Create distribution ZIP
 
 	@mkdir -p /tmp/rsl-licensing-build
 
-	@rsync -av \
-		--exclude='.git*' \
-		--exclude='tests/' \
-		--exclude='docs/' \
-		--exclude='coverage/' \
-		--exclude='test-logs/' \
-		--exclude='test-report.html' \
-		--exclude='.phpunit*' \
-		--exclude='phpunit.xml' \
-		--exclude='phpcs.xml*' \
-		--exclude='composer.lock' \
-		--exclude='Makefile' \
-		--exclude='AGENTS.md' \
-		--exclude='IDEAS.md' \
-		--exclude='SECURITY.md' \
-		--exclude='agents.md' \
-		--exclude='rsl-*.md' \
-		--exclude='README.md' \
-		--exclude='blueprint.json' \
-		--exclude='releases/' \
-		--exclude='messages.mo' \
-		--exclude='.claude/' \
-		--exclude='scripts/' \
-		--exclude='.github/' \
-		--exclude='node_modules/' \
-		--exclude='.DS_Store' \
-		--exclude='*.log' \
-		--exclude='*.zip' \
-		./ /tmp/rsl-licensing-build/rsl-licensing/
+	@rsync -av --exclude-from=.distignore ./ /tmp/rsl-licensing-build/rsl-licensing/
 
 	@cd /tmp/rsl-licensing-build && zip -r "$(ZIP_NAME)" rsl-licensing/
 	@mv "/tmp/rsl-licensing-build/$(ZIP_NAME)" ./
