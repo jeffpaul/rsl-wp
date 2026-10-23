@@ -901,12 +901,13 @@ class RSL_Admin {
 				$post_type,
 				'_rsl_license_id',
 				array(
-					'type'          => 'integer',
-					'description'   => 'RSL License ID for this post',
-					'single'        => true,
-					'show_in_rest'  => true,
-					'auth_callback' => function () {
-						return current_user_can( 'edit_posts' );
+					'type'              => 'integer',
+					'description'       => 'RSL License ID for this post',
+					'single'            => true,
+					'show_in_rest'      => true,
+					'sanitize_callback' => 'absint',
+					'auth_callback'     => function ( $allowed, $meta_key, $object_id ) {
+						return current_user_can( 'edit_post', $object_id );
 					},
 				)
 			);
@@ -915,12 +916,13 @@ class RSL_Admin {
 				$post_type,
 				'_rsl_override_content_url',
 				array(
-					'type'          => 'string',
-					'description'   => 'Override content URL for RSL license',
-					'single'        => true,
-					'show_in_rest'  => true,
-					'auth_callback' => function () {
-						return current_user_can( 'edit_posts' );
+					'type'              => 'string',
+					'description'       => 'Override content URL for RSL license',
+					'single'            => true,
+					'show_in_rest'      => true,
+					'sanitize_callback' => 'esc_url_raw',
+					'auth_callback'     => function ( $allowed, $meta_key, $object_id ) {
+						return current_user_can( 'edit_post', $object_id );
 					},
 				)
 			);

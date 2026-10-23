@@ -434,4 +434,28 @@ class TestSecurityValidation extends TestCase {
 		$this->assertEquals( $license_id, $updated_license['id'] );
 		$this->assertNotEquals( '2020-01-01 00:00:00', $updated_license['created_at'] );
 	}
+
+	/**
+	 * Test that unknown column names are dropped before reaching $wpdb
+	 *
+	 * @covers RSL_License::update_license
+	 * @covers RSL_License::sanitize_license_data
+	 */
+	public function test_update_license_drops_unknown_columns() {
+		$license_id = $this->create_test_license( array( 'name' => 'Column Injection Test' ) );
+
+		$malicious_data = array(
+			'name'                                => 'Safe Name',
+			'name` = (SELECT user_pass FROM wp_users LIMIT 1), `name' => 'x',
+		);
+
+		$sanitized = $this->license_handler->sanitize_license_data( $malicious_data );
+		$this->assertSame( array( 'name' ), array_keys( $sanitized ) );
+
+		$result = $this->license_handler->update_license( $license_id, $malicious_data );
+		$this->assertTrue( $result );
+
+		$updated_license = $this->license_handler->get_license( $license_id );
+		$this->assertEquals( 'Safe Name', $updated_license['name'] );
+	}
 }
