@@ -1088,7 +1088,7 @@ class RSL_Server {
 				array_merge(
 					$session_data,
 					array(
-						'token'      => $token_data['token'],
+						'token'      => $token_data['access_token'],
 						'expires_at' => $token_data['expires_at'],
 					)
 				)
