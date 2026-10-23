@@ -531,4 +531,84 @@ class TestWooCommerceIntegration extends TestCase {
 			$this->assertArrayHasKey( 'checkout_url', $data );
 		}
 	}
+
+	/**
+	 * Reused license products follow license price edits
+	 *
+	 * @covers RSL_Server::ensure_wc_product_for_license
+	 * @covers RSL_Server::sync_wc_product_price
+	 */
+	public function test_reused_product_price_follows_license() {
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			$this->markTestSkipped( 'WooCommerce functions not available' );
+		}
+
+		$license = array(
+			'id'           => 4242,
+			'name'         => 'Price Sync License',
+			'amount'       => 10.00,
+			'currency'     => get_woocommerce_currency(),
+			'payment_type' => 'purchase',
+		);
+
+		$method = ( new \ReflectionClass( $this->server ) )->getMethod( 'ensure_wc_product_for_license' );
+		$method->setAccessible( true );
+
+		$product_id = $method->invoke( $this->server, $license );
+		$this->assertIsInt( $product_id );
+
+		$license['amount'] = 25.00;
+		$this->assertEquals( $product_id, $method->invoke( $this->server, $license ) );
+		$this->assertEquals( 25.00, (float) wc_get_product( $product_id )->get_price() );
+	}
+
+	/**
+	 * Orders can only be redeemed by the client recorded at checkout, for the full license price
+	 *
+	 * @covers RSL_Server::verify_order_client
+	 * @covers RSL_Server::verify_order_payment
+	 */
+	public function test_order_entitlement_requires_owner_and_full_payment() {
+		if ( ! function_exists( 'wc_create_order' ) ) {
+			$this->markTestSkipped( 'WooCommerce order functions not available' );
+		}
+
+		$product = new \WC_Product_Simple();
+		$product->set_regular_price( 20 );
+		$product->save();
+
+		$license = array(
+			'id'       => 4243,
+			'amount'   => 20.00,
+			'currency' => get_woocommerce_currency(),
+		);
+
+		$order   = wc_create_order();
+		$item_id = $order->add_product( $product, 1 );
+		$item    = $order->get_item( $item_id );
+		$order->update_meta_data( '_rsl_client_id', 'rsl_owner' );
+		$order->calculate_totals();
+		$order->save();
+
+		$reflection    = new \ReflectionClass( $this->server );
+		$verify_client = $reflection->getMethod( 'verify_order_client' );
+		$verify_client->setAccessible( true );
+		$verify_paid = $reflection->getMethod( 'verify_order_payment' );
+		$verify_paid->setAccessible( true );
+
+		$this->assertTrue( $verify_client->invoke( $this->server, $order, $item, 'rsl_owner', $license, $product->get_id() ) );
+		$this->assertFalse( $verify_client->invoke( $this->server, $order, $item, 'rsl_attacker', $license, $product->get_id() ) );
+		$this->assertTrue( $verify_paid->invoke( $this->server, $order, $item, $license ) );
+
+		// Discounted to zero must not mint a paid token
+		$item->set_total( 0 );
+		$this->assertInstanceOf( 'WP_Error', $verify_paid->invoke( $this->server, $order, $item, $license ) );
+
+		// Unbound orders are rejected unless a site owner opts in via filter
+		$order->delete_meta_data( '_rsl_client_id' );
+		$this->assertFalse( $verify_client->invoke( $this->server, $order, $item, 'rsl_owner', $license, $product->get_id() ) );
+		add_filter( 'rsl_verify_order_client', '__return_true' );
+		$this->assertTrue( $verify_client->invoke( $this->server, $order, $item, 'rsl_owner', $license, $product->get_id() ) );
+		remove_filter( 'rsl_verify_order_client', '__return_true' );
+	}
 }
