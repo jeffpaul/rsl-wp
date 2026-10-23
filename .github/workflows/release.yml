@@ -87,24 +87,8 @@ jobs:
         # Create clean directory for plugin
         mkdir -p /tmp/rsl-licensing
         
-        # Copy production files only
-        rsync -av \
-          --exclude='.git*' \
-          --exclude='tests/' \
-          --exclude='docs/' \
-          --exclude='coverage/' \
-          --exclude='test-logs/' \
-          --exclude='test-report.html' \
-          --exclude='.phpunit*' \
-          --exclude='phpunit.xml' \
-          --exclude='phpcs.xml*' \
-          --exclude='composer.json' \
-          --exclude='composer.lock' \
-          --exclude='AGENTS.md' \
-          --exclude='node_modules/' \
-          --exclude='.DS_Store' \
-          --exclude='*.log' \
-          ./ /tmp/rsl-licensing/
+        # Copy production files only (exclude list lives in .distignore)
+        rsync -av --exclude-from=.distignore ./ /tmp/rsl-licensing/
         
         # Verify required files are present
         test -f /tmp/rsl-licensing/rsl-wp.php || { echo "Main plugin file missing"; exit 1; }

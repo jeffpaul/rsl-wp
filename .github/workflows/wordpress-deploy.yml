@@ -62,6 +62,13 @@ jobs:
         vendor/bin/phpunit tests/unit/TestBasicFunctionality.php tests/unit/TestRSLLicense.php
         echo "Tests passed ✅"
 
+    - name: Restore production dependencies
+      run: |
+        # The test step installed dev packages; the deployed tree must ship a --no-dev vendor/.
+        composer install --no-dev --optimize-autoloader
+        php -r 'require "vendor/autoload.php"; exit( class_exists( "Firebase\\JWT\\JWT" ) ? 0 : 1 );'
+        test ! -d vendor/phpunit || { echo "Dev packages still present in vendor/"; exit 1; }
+
     - name: Prepare plugin for WordPress.org
       run: |
         VERSION="${{ steps.version.outputs.version }}"
