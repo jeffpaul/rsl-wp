@@ -185,9 +185,12 @@ jobs:
         tools: composer:2.8.12
 
     # vendor/ is committed so git-clone installs work, so it must be the production build.
-    # No cache here: a clean install is compared against what is committed.
+    # No cache, and the committed vendor/ is removed first, so packages are really
+    # re-downloaded and the fresh install is compared against what is committed.
     - name: Install production dependencies
-      run: composer install --no-dev --optimize-autoloader --prefer-dist --no-progress
+      run: |
+        rm -rf vendor
+        composer install --no-dev --optimize-autoloader --prefer-dist --no-progress
 
     - name: Verify committed vendor/ matches production install
       run: |
@@ -196,7 +199,7 @@ jobs:
           echo "❌ vendor/ is out of date. Run: composer install --no-dev --optimize-autoloader --prefer-dist"
           exit 1
         fi
-        UNTRACKED=$(git status --porcelain --untracked-files=all -- vendor/)
+        UNTRACKED=$(git ls-files --others --exclude-standard -- vendor/)
         if [ -n "$UNTRACKED" ]; then
           echo "$UNTRACKED"
           echo "❌ vendor/ has files the production install created that are not committed"
