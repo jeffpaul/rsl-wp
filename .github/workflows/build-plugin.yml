@@ -69,31 +69,8 @@ jobs:
         # Create temporary directory for plugin
         mkdir -p /tmp/rsl-licensing
         
-        # Copy plugin files (exclude dev files and docs)
-        rsync -av \
-          --exclude='.git*' \
-          --exclude='tests/' \
-          --exclude='docs/' \
-          --exclude='coverage/' \
-          --exclude='test-logs/' \
-          --exclude='test-report.html' \
-          --exclude='.phpunit*' \
-          --exclude='phpunit.xml' \
-          --exclude='phpcs.xml*' \
-          --exclude='composer.json' \
-          --exclude='composer.lock' \
-          --exclude='Makefile' \
-          --exclude='AGENTS.md' \
-          --exclude='IDEAS.md' \
-          --exclude='SECURITY.md' \
-          --exclude='agents.md' \
-          --exclude='rsl-*.md' \
-          --exclude='scripts/' \
-          --exclude='.github/' \
-          --exclude='node_modules/' \
-          --exclude='.DS_Store' \
-          --exclude='*.log' \
-          ./ /tmp/rsl-licensing/
+        # Copy plugin files (exclude list lives in .distignore)
+        rsync -av --exclude-from=.distignore ./ /tmp/rsl-licensing/
         
         # Create ZIP
         cd /tmp

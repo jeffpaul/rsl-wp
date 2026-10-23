@@ -1,0 +1,60 @@
+# Files and directories excluded from release ZIPs and the WordPress.org deploy.
+# Read by `rsync --exclude-from=.distignore` (release.yml, build-plugin.yml, Makefile)
+# and automatically by 10up/action-wordpress-plugin-deploy (wordpress-deploy.yml).
+#
+# vendor/ is NOT excluded: it ships, and must be a `composer install --no-dev` build.
+
+# Version control and CI
+.git
+.github
+.gitignore
+.gitattributes
+.distignore
+.wordpress-org
+/.claude
+
+# WordPress.org directory assets (banners/icons are uploaded to SVN /assets, not trunk)
+/assets
+
+# Tests, tooling and build config
+/tests
+/scripts
+/coverage
+/test-logs
+/test-results
+/test-report.html
+.phpunit*
+/phpunit.xml
+/phpunit.xml.dist
+/phpcs.xml
+/phpcs.xml.dist
+/composer.json
+/composer.lock
+/Makefile
+/node_modules
+/blueprint.json
+/releases
+/build
+/dist
+
+# Developer documentation
+/docs
+/README.md
+/SECURITY.md
+/AGENTS.md
+/agents.md
+/IDEAS.md
+/rsl-*.md
+
+# Stray root catalog; translations are loaded from languages/
+/messages.mo
+
+# OS / editor / build artifacts
+.DS_Store
+Thumbs.db
+*.log
+*.zip
+*.tar.gz
+.env
+.vscode
+.idea

@@ -169,3 +169,44 @@ jobs:
         test -d includes/ || { echo "Includes directory missing"; exit 1; }
         test -f README.md || { echo "README.md missing"; exit 1; }
         echo "Plugin structure validation passed"
+
+  vendor:
+    name: Committed Vendor Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.1'
+        tools: composer:2.8.12
+
+    # vendor/ is committed so git-clone installs work, so it must be the production build.
+    # No cache, and the committed vendor/ is removed first, so packages are really
+    # re-downloaded and the fresh install is compared against what is committed.
+    - name: Install production dependencies
+      run: |
+        rm -rf vendor
+        composer install --no-dev --optimize-autoloader --prefer-dist --no-progress
+
+    - name: Verify committed vendor/ matches production install
+      run: |
+        # installed.php embeds the checked-out commit SHA, so it always differs in CI.
+        if ! git diff --exit-code -- vendor/ ':(exclude)vendor/composer/installed.php'; then
+          echo "❌ vendor/ is out of date. Run: composer install --no-dev --optimize-autoloader --prefer-dist"
+          exit 1
+        fi
+        UNTRACKED=$(git ls-files --others --exclude-standard -- vendor/)
+        if [ -n "$UNTRACKED" ]; then
+          echo "$UNTRACKED"
+          echo "❌ vendor/ has files the production install created that are not committed"
+          exit 1
+        fi
+        echo "✅ vendor/ matches production install"
+
+    - name: Smoke test autoloader
+      run: |
+        php -r 'require "vendor/autoload.php"; exit( class_exists( "Firebase\\JWT\\JWT" ) ? 0 : 1 );'
