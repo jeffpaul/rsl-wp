@@ -280,13 +280,13 @@ class RSL_Server {
 	}
 
 	public function rest_validate_license( $request ) {
-		$params = $request->get_json_params();
+		// get_param() covers JSON, form-encoded and internally built (set_body_params) requests.
+		$content_url = $request->get_param( 'content_url' );
 
-		if ( ! isset( $params['content_url'] ) ) {
+		if ( ! is_string( $content_url ) || '' === $content_url ) {
 			return new WP_Error( 'missing_content_url', 'Content URL is required', array( 'status' => 400 ) );
 		}
 
-		$content_url       = $params['content_url'];
 		$matching_licenses = $this->find_matching_licenses( $content_url );
 
 		if ( empty( $matching_licenses ) ) {

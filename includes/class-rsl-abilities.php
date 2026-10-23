@@ -138,36 +138,84 @@ class RSL_Abilities {
 				'input_schema'        => array(
 					'type'                 => 'object',
 					'properties'           => array(
-						'license_id'   => array(
+						'license_id'       => array(
 							'type'        => 'integer',
 							'description' => 'ID of the license to update',
 							'minimum'     => 1,
 						),
-						'name'         => array(
+						'name'             => array(
 							'type'        => 'string',
 							'description' => 'Updated license name',
 						),
-						'description'  => array(
+						'description'      => array(
 							'type'        => 'string',
 							'description' => 'Updated license description',
 						),
-						'payment_type' => array(
+						'payment_type'     => array(
 							'type'        => 'string',
 							'enum'        => array( 'free', 'purchase', 'subscription', 'training', 'crawl', 'inference', 'attribution' ),
 							'description' => 'Updated payment type',
 						),
-						'amount'       => array(
+						'amount'           => array(
 							'type'        => 'number',
 							'minimum'     => 0,
 							'description' => 'Updated license fee',
 						),
-						'active'       => array(
+						'active'           => array(
 							'type'        => 'boolean',
 							'description' => 'Whether the license is active',
 						),
+						'content_url'      => array(
+							'type'        => 'string',
+							'description' => 'Updated URL pattern this license applies to (supports wildcards)',
+							'minLength'   => 1,
+						),
+						'currency'         => array(
+							'type'        => 'string',
+							'pattern'     => '^[A-Z]{3}$',
+							'description' => 'Updated currency code (ISO 4217)',
+						),
+						'permits_usage'    => array(
+							'type'        => 'string',
+							'description' => 'Comma-separated usage types allowed (all, train-ai, search, etc.)',
+						),
+						'prohibits_usage'  => array(
+							'type'        => 'string',
+							'description' => 'Comma-separated usage types prohibited',
+						),
+						'permits_user'     => array(
+							'type'        => 'string',
+							'description' => 'User types allowed (commercial, non-commercial, education, etc.)',
+						),
+						'prohibits_user'   => array(
+							'type'        => 'string',
+							'description' => 'User types prohibited',
+						),
+						'permits_geo'      => array(
+							'type'        => 'string',
+							'description' => 'Geographic regions allowed (ISO 3166-1 alpha-2 codes)',
+						),
+						'prohibits_geo'    => array(
+							'type'        => 'string',
+							'description' => 'Geographic regions prohibited',
+						),
+						'copyright_holder' => array(
+							'type'        => 'string',
+							'description' => 'Name of copyright holder',
+						),
+						'contact_email'    => array(
+							'type'        => 'string',
+							'format'      => 'email',
+							'description' => 'Contact email for licensing inquiries',
+						),
+						'server_url'       => array(
+							'type'        => 'string',
+							'format'      => 'uri',
+							'description' => 'Optional RSL License Server URL for authentication',
+						),
 					),
 					'required'             => array( 'license_id' ),
-					'additionalProperties' => true,
+					'additionalProperties' => false,
 				),
 				'output_schema'       => array(
 					'type'       => 'object',
@@ -629,7 +677,10 @@ class RSL_Abilities {
 		$license_id = $input['license_id'];
 		unset( $input['license_id'] );
 
-		$result = $this->license_handler->update_license( $license_id, $input );
+		// Restrict to known license columns and sanitize, regardless of schema enforcement.
+		$data = $this->license_handler->sanitize_license_data( $input );
+
+		$result = $this->license_handler->update_license( $license_id, $data );
 
 		if ( ! $result ) {
 			return new \WP_Error( 'update_failed', __( 'Failed to update license', 'rsl-wp' ) );
@@ -637,7 +688,7 @@ class RSL_Abilities {
 
 		return array(
 			'success'        => true,
-			'updated_fields' => array_keys( $input ),
+			'updated_fields' => array_keys( $data ),
 		);
 	}
 
@@ -726,6 +777,11 @@ class RSL_Abilities {
 		$response = $this->server->rest_validate_license( $request );
 
 		if ( is_wp_error( $response ) ) {
+			// Only "no matching license" means the content is unlicensed; any other failure is an error.
+			if ( 'no_license' !== $response->get_error_code() ) {
+				return $response;
+			}
+
 			return array(
 				'has_license' => false,
 				'license'     => null,
@@ -749,6 +805,11 @@ class RSL_Abilities {
 
 	public function validate_content( $input ) {
 		$content_license = $this->get_content_license( array( 'content_url' => $input['content_url'] ) );
+
+		// Fail closed: a failed lookup must not report the content as unrestricted.
+		if ( is_wp_error( $content_license ) ) {
+			return $content_license;
+		}
 
 		if ( ! $content_license['has_license'] ) {
 			return array(

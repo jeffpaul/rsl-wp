@@ -29,6 +29,44 @@ class RSL_License {
 	private $table_name;
 
 	/**
+	 * Writable license columns mapped to their $wpdb format placeholders.
+	 *
+	 * Only these keys are ever passed to $wpdb->insert() / $wpdb->update(),
+	 * since wpdb does not escape column names.
+	 *
+	 * @var array
+	 */
+	private static $column_formats = array(
+		'name'             => '%s',
+		'description'      => '%s',
+		'content_url'      => '%s',
+		'server_url'       => '%s',
+		'encrypted'        => '%d',
+		'lastmod'          => '%s',
+		'permits_usage'    => '%s',
+		'permits_user'     => '%s',
+		'permits_geo'      => '%s',
+		'prohibits_usage'  => '%s',
+		'prohibits_user'   => '%s',
+		'prohibits_geo'    => '%s',
+		'payment_type'     => '%s',
+		'standard_url'     => '%s',
+		'custom_url'       => '%s',
+		'amount'           => '%f',
+		'currency'         => '%s',
+		'warranty'         => '%s',
+		'disclaimer'       => '%s',
+		'schema_url'       => '%s',
+		'copyright_holder' => '%s',
+		'copyright_type'   => '%s',
+		'contact_email'    => '%s',
+		'contact_url'      => '%s',
+		'terms_url'        => '%s',
+		'active'           => '%d',
+		'updated_at'       => '%s',
+	);
+
+	/**
 	 * Constructor.
 	 *
 	 * Initializes the license class and sets up database table name.
@@ -76,7 +114,8 @@ class RSL_License {
 			'active'           => 1,
 		);
 
-		$data = wp_parse_args( $data, $defaults );
+		$data = $this->sanitize_license_data( wp_parse_args( $data, $defaults ) );
+		unset( $data['updated_at'] );
 
 		// Validate required fields.
 		if ( empty( $data['name'] ) || empty( $data['content_url'] ) ) {
@@ -87,40 +126,15 @@ class RSL_License {
 		$result = $wpdb->insert(
 			$this->table_name,
 			$data,
-			array(
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%d',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%f',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-				'%d',
-			)
+			$this->get_formats( $data )
 		);
 
 		if ( false === $result ) {
 			// Database error handled elsewhere.
 			return false;
 		}
+
+		$this->invalidate_cache( $wpdb->insert_id );
 
 		return $wpdb->insert_id;
 	}
@@ -233,7 +247,7 @@ class RSL_License {
 		}
 
 		// Check cache first for listings.
-		$cache_key = 'rsl_licenses_' . md5( $sql . serialize( $values ) );
+		$cache_key = 'rsl_licenses_' . md5( $sql . serialize( $values ) ) . ':' . wp_cache_get_last_changed( 'rsl_licenses' );
 		$results   = wp_cache_get( $cache_key, 'rsl_licenses' );
 
 		if ( false === $results ) {
@@ -271,44 +285,14 @@ class RSL_License {
 			return false;
 		}
 
+		$data               = $this->sanitize_license_data( $data );
 		$data['updated_at'] = current_time( 'mysql' );
-
-		$format = array(
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%d',
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%f',
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%s',
-			'%d',
-			'%s',
-			'%s',
-		);
 
 		$result = $wpdb->update(
 			$this->table_name,
 			$data,
 			array( 'id' => $id ),
-			$format,
+			$this->get_formats( $data ),
 			array( '%d' )
 		);
 
@@ -316,6 +300,8 @@ class RSL_License {
 			// Database error handled elsewhere.
 			return false;
 		}
+
+		$this->invalidate_cache( $id );
 
 		return false !== $result;
 	}
@@ -346,7 +332,124 @@ class RSL_License {
 			return false;
 		}
 
+		$this->invalidate_cache( $id );
+
 		return false !== $result;
+	}
+
+	/**
+	 * Sanitize license data for storage.
+	 *
+	 * Drops any key that is not a writable license column and applies the
+	 * same sanitizers the admin license form uses, so every write path
+	 * (admin AJAX, Abilities API, programmatic callers) stores clean data.
+	 *
+	 * @param array $data Raw license data.
+	 * @return array Sanitized license data containing only known columns.
+	 */
+	public function sanitize_license_data( $data ) {
+		if ( ! is_array( $data ) ) {
+			return array();
+		}
+
+		$data = array_intersect_key( $data, self::$column_formats );
+
+		$url_fields = array( 'server_url', 'standard_url', 'custom_url', 'schema_url', 'contact_url', 'terms_url' );
+
+		foreach ( $data as $key => $value ) {
+			if ( is_array( $value ) || is_object( $value ) ) {
+				$value = '';
+			}
+
+			switch ( $key ) {
+				case 'description':
+					$data[ $key ] = sanitize_textarea_field( $value );
+					break;
+
+				case 'content_url':
+					$value = trim( (string) $value );
+					// Server-relative paths/patterns (e.g. "/images/*") are stored as provided when they pass the admin allowlist.
+					if ( 0 === strpos( $value, '/' ) && 0 !== strpos( $value, '//' ) ) {
+						$data[ $key ] = preg_match( '#^/[A-Za-z0-9._~!\'()*+,;=:@/\-%]*\*?\$?$#', $value ) ? $value : '';
+					} else {
+						$data[ $key ] = esc_url_raw( $value );
+					}
+					break;
+
+				case 'encrypted':
+				case 'active':
+					$data[ $key ] = empty( $value ) ? 0 : 1;
+					break;
+
+				case 'amount':
+					$data[ $key ] = min( 999999.99, max( 0, floatval( $value ) ) );
+					break;
+
+				case 'currency':
+					$value        = strtoupper( sanitize_text_field( $value ) );
+					$data[ $key ] = preg_match( '/^[A-Z]{3}$/', $value ) ? $value : '';
+					break;
+
+				case 'payment_type':
+					$value        = sanitize_text_field( $value );
+					$data[ $key ] = array_key_exists( $value, $this->get_payment_options() ) ? $value : 'free';
+					break;
+
+				case 'contact_email':
+					$data[ $key ] = sanitize_email( $value );
+					break;
+
+				default:
+					$data[ $key ] = in_array( $key, $url_fields, true )
+						? esc_url_raw( $value )
+						: sanitize_text_field( $value );
+					break;
+			}
+		}
+
+		return $data;
+	}
+
+	/**
+	 * Build the $wpdb format array matching the keys of a data array.
+	 *
+	 * @param array $data Data keyed by allowlisted column name.
+	 * @return array Format placeholders in the same order as $data.
+	 */
+	private function get_formats( $data ) {
+		$formats = array();
+		foreach ( array_keys( $data ) as $column ) {
+			$formats[] = self::$column_formats[ $column ];
+		}
+		return $formats;
+	}
+
+	/**
+	 * Invalidate cached license data after a write.
+	 *
+	 * Deletes the single-license entry and invalidates all cached listings,
+	 * so deactivated or repriced licenses take effect immediately even with
+	 * a persistent object cache.
+	 *
+	 * @param int $id License ID.
+	 */
+	private function invalidate_cache( $id ) {
+		$id = intval( $id );
+		if ( 0 < $id ) {
+			wp_cache_delete( "rsl_license_{$id}", 'rsl_licenses' );
+		}
+		wp_cache_delete( 'rsl_license_count', 'rsl_licenses' );
+
+		if ( function_exists( 'wp_cache_supports' ) && wp_cache_supports( 'flush_group' ) ) {
+			wp_cache_flush_group( 'rsl_licenses' );
+		}
+
+		// Listing keys are salted with last_changed, so bumping it invalidates them on any cache backend.
+		if ( function_exists( 'wp_cache_set_last_changed' ) ) {
+			wp_cache_set_last_changed( 'rsl_licenses' );
+		} else {
+			wp_cache_delete( 'last_changed', 'rsl_licenses' );
+		}
 	}
 
 	/**

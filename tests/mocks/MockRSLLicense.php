@@ -81,6 +81,7 @@ if ( ! class_exists( 'RSL_License' ) ) {
 				return false;
 			}
 
+			$data                  = $this->sanitize_license_data( $data );
 			$data['updated_at']    = date( 'Y-m-d H:i:s' );
 			self::$licenses[ $id ] = array_merge( self::$licenses[ $id ], $data );
 			return true;
@@ -164,6 +165,38 @@ if ( ! class_exists( 'RSL_License' ) ) {
 
 		public function sanitize_license_data( $data ) {
 			$sanitized = array();
+
+			// Mirror the real class: only writable license columns survive.
+			$columns = array(
+				'name',
+				'description',
+				'content_url',
+				'server_url',
+				'encrypted',
+				'lastmod',
+				'permits_usage',
+				'permits_user',
+				'permits_geo',
+				'prohibits_usage',
+				'prohibits_user',
+				'prohibits_geo',
+				'payment_type',
+				'standard_url',
+				'custom_url',
+				'amount',
+				'currency',
+				'warranty',
+				'disclaimer',
+				'schema_url',
+				'copyright_holder',
+				'copyright_type',
+				'contact_email',
+				'contact_url',
+				'terms_url',
+				'active',
+				'updated_at',
+			);
+			$data    = array_intersect_key( (array) $data, array_flip( $columns ) );
 
 			foreach ( $data as $key => $value ) {
 				switch ( $key ) {
