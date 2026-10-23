@@ -138,7 +138,8 @@ class TestEndToEndWorkflows extends TestCase {
 		$validate_method->setAccessible( true );
 
 		$_SERVER['REQUEST_URI'] = '/e2e-free-content';
-		$is_valid               = $validate_method->invoke( $this->server, $token );
+		$license                = $this->license_handler->get_license( $license_id );
+		$is_valid               = $validate_method->invoke( $this->server, $token, array( $license ) );
 		$this->assertTrue( $is_valid );
 	}
 

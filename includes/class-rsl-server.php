@@ -6,6 +6,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class RSL_Server {
 
+	/**
+	 * Value of the 'typ' claim carried by license access tokens.
+	 */
+	const LICENSE_TOKEN_TYPE = 'rsl_license';
+
 	private $license_handler;
 	private $payment_registry;
 	private $session_manager;
@@ -103,10 +108,10 @@ class RSL_Server {
 			exit;
 		}
 
-		// Validate the license token
+		// Validate the license token against the license(s) gating this URL
 		$token = $this->extract_license_token( $auth_header );
 
-		if ( ! $this->validate_license_token( $token ) ) {
+		if ( ! $this->validate_license_token( $token, $this->get_gated_licenses_for_request() ) ) {
 			$this->send_invalid_license_response();
 			exit;
 		}
@@ -337,8 +342,11 @@ class RSL_Server {
 		}
 
 		$client = sanitize_text_field( $req->get_param( 'client' ) );
-		if ( ! $client ) {
-			$client = $client_id ? $client_id : 'anonymous';
+		if ( $requires_auth ) {
+			// Paid licenses: the token subject is always the authenticated client.
+			$client = $client_id;
+		} elseif ( ! $client ) {
+			$client = 'anonymous';
 		}
 
 		$resource        = esc_url_raw( $req->get_param( 'resource' ) ); // Resource parameter for validation
@@ -504,16 +512,8 @@ class RSL_Server {
 			return rest_ensure_response( array( 'active' => false ) );
 		}
 
-		$now = time();
-
-		// Check expiration
-		if ( ! empty( $payload['exp'] ) && $now > intval( $payload['exp'] ) ) {
-			$this->add_cors_headers();
-			return rest_ensure_response( array( 'active' => false ) );
-		}
-
-		// Check if token is revoked (if jti claim exists)
-		if ( ! empty( $payload['jti'] ) && $this->oauth_client->is_token_revoked( $payload['jti'] ) ) {
+		// Check type, issuer, audience, expiry and revocation
+		if ( ! $this->verify_license_token_claims( $payload ) ) {
 			$this->add_cors_headers();
 			return rest_ensure_response( array( 'active' => false ) );
 		}
@@ -638,9 +638,18 @@ class RSL_Server {
 	}
 
 	private function requires_license_auth() {
+		return ! empty( $this->get_gated_licenses_for_request() );
+	}
+
+	/**
+	 * Get the active licenses with a server_url that gate the current request.
+	 *
+	 * @return array Matching licenses (empty when no license auth is required).
+	 */
+	private function get_gated_licenses_for_request() {
 		// Never for admins
 		if ( is_admin() || current_user_can( 'manage_options' ) ) {
-			return false;
+			return array();
 		}
 
 		// Skip core/asset paths
@@ -648,24 +657,25 @@ class RSL_Server {
 		$wp_core_paths = array( '/wp-admin/', '/wp-login.php', '/wp-cron.php', '/xmlrpc.php', '/wp-json/', '/wp-content/', '/wp-includes/' );
 		foreach ( $wp_core_paths as $core_path ) {
 			if ( strpos( $request_uri, $core_path ) !== false ) {
-				return false;
+				return array();
 			}
 		}
 
 		// Only challenge probable crawlers
 		if ( ! $this->is_crawler_request() ) {
-			return false;
+			return array();
 		}
 
 		// Require auth if a license with server_url matches the current request
 		$current_url = home_url( $request_uri );
 		$licenses    = $this->license_handler->get_licenses( array( 'active' => 1 ) );
+		$gated       = array();
 		foreach ( $licenses as $license ) {
 			if ( ! empty( $license['server_url'] ) && $this->url_matches_pattern( $current_url, $license['content_url'] ) ) {
-				return true;
+				$gated[] = $license;
 			}
 		}
-		return false;
+		return $gated;
 	}
 
 	private function get_authorization_header() {
@@ -740,9 +750,8 @@ class RSL_Server {
 
 	private function is_free_license( $license ) {
 		$amount = floatval( $license['amount'] ?? 0 );
-		$type   = $license['payment_type'] ?? 'free';
-		// Free if amount is 0 OR explicitly free/attribution type
-		return $amount === 0.0 || in_array( $type, array( 'free', 'attribution' ), true );
+		// Free only if amount is 0; payment_type alone never makes a priced license free
+		return $amount === 0.0;
 	}
 
 	// ===== JWT Secret Management =====
@@ -816,30 +825,87 @@ class RSL_Server {
 		return $payload;
 	}
 
-	private function validate_license_token( $token ) {
+	/**
+	 * Verify the claims every license token issued by this site must carry.
+	 *
+	 * @param array $payload Decoded, signature-verified JWT payload.
+	 * @return bool
+	 */
+	private function verify_license_token_claims( $payload ) {
+		if ( ! is_array( $payload ) ) {
+			return false;
+		}
+
+		// Must be a license token (not e.g. a payment proof signed with the same secret)
+		if ( ( $payload['typ'] ?? '' ) !== self::LICENSE_TOKEN_TYPE ) {
+			return false;
+		}
+
+		// Issuer must be this site
+		if ( ( $payload['iss'] ?? '' ) !== home_url() ) {
+			return false;
+		}
+
+		// Audience must be this host
+		$host = wp_parse_url( home_url(), PHP_URL_HOST );
+		if ( empty( $payload['aud'] ) || $payload['aud'] !== $host ) {
+			return false;
+		}
+
+		$now = time();
+		if ( empty( $payload['exp'] ) || $now > intval( $payload['exp'] ) ) {
+			return false;
+		}
+		if ( ! empty( $payload['nbf'] ) && $now < intval( $payload['nbf'] ) ) {
+			return false;
+		}
+
+		// Must carry a jti that has not been revoked
+		if ( empty( $payload['jti'] ) || ! is_string( $payload['jti'] ) || $this->oauth_client->is_token_revoked( $payload['jti'] ) ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Validate a license token for the current request.
+	 *
+	 * @param string $token            Raw JWT.
+	 * @param array  $gated_licenses   Licenses gating the current URL; the token's
+	 *                                 lic claim must match one of them.
+	 * @return bool
+	 */
+	private function validate_license_token( $token, $gated_licenses = array() ) {
 		$payload = $this->jwt_decode_token( $token );
 		if ( is_wp_error( $payload ) ) {
 			return false;
 		}
-		$now = time();
-		if ( ! empty( $payload['nbf'] ) && $now < intval( $payload['nbf'] ) ) {
-			return false;
-		}
-		if ( ! empty( $payload['exp'] ) && $now > intval( $payload['exp'] ) ) {
+
+		if ( ! $this->verify_license_token_claims( $payload ) ) {
 			return false;
 		}
 
-		// Audience should be this host
-		$aud  = isset( $payload['aud'] ) ? $payload['aud'] : '';
-		$host = wp_parse_url( home_url(), PHP_URL_HOST );
-		if ( $aud && $aud !== $host ) {
+		// Token must be issued for a license that gates this URL
+		if ( ! isset( $payload['lic'] ) ) {
+			return false;
+		}
+		$lic     = (int) $payload['lic'];
+		$matched = false;
+		foreach ( (array) $gated_licenses as $license ) {
+			if ( isset( $license['id'] ) && (int) $license['id'] === $lic ) {
+				$matched = true;
+				break;
+			}
+		}
+		if ( ! $matched ) {
 			return false;
 		}
 
-		// Optional: ensure this URL is within the licensed pattern
+		// Ensure this URL is within the licensed pattern
 		$pattern     = isset( $payload['pattern'] ) ? $payload['pattern'] : '';
 		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH ) : '';
-		if ( $pattern && ! $this->url_matches_pattern( home_url( $request_uri ), $pattern ) ) {
+		if ( ! $pattern || ! is_string( $pattern ) || ! $this->url_matches_pattern( home_url( $request_uri ), $pattern ) ) {
 			return false;
 		}
 		return true;
@@ -853,6 +919,7 @@ class RSL_Server {
 		$jti = $this->oauth_client->generate_jti();
 
 		$payload = array(
+			'typ'     => self::LICENSE_TOKEN_TYPE,
 			'iss'     => home_url(),
 			'aud'     => wp_parse_url( home_url(), PHP_URL_HOST ),
 			'sub'     => $client ? $client : 'anonymous',
@@ -871,7 +938,7 @@ class RSL_Server {
 		if ( ! $this->is_free_license( $license ) || isset( $metadata['track_token'] ) ) {
 			$this->oauth_client->store_token(
 				$jti,
-				is_string( $client ) && strpos( $client, '_' ) !== false ? $client : 'anonymous',
+				$client ? (string) $client : 'anonymous',
 				intval( $license['id'] ),
 				$payload['exp'],
 				$metadata

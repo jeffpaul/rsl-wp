@@ -224,6 +224,11 @@ class RSL_OAuth_Client {
 			array( '%s' )
 		);
 
+		// Drop cached credentials/client data so the revocation takes effect immediately
+		wp_cache_delete( 'rsl_oauth_client_validate_' . $client_id, 'rsl_oauth' );
+		wp_cache_delete( 'rsl_oauth_client_' . $client_id, 'rsl_oauth' );
+		wp_cache_delete( 'rsl_oauth_clients', 'rsl_oauth' );
+
 		return $result !== false;
 	}
 
@@ -315,6 +320,8 @@ class RSL_OAuth_Client {
 			array( '%s' )
 		);
 
+		wp_cache_delete( 'rsl_token_' . $jti, 'rsl_tokens' );
+
 		return $result !== false;
 	}
 
@@ -329,6 +336,13 @@ class RSL_OAuth_Client {
 
 		$table_name = $wpdb->prefix . 'rsl_tokens';
 
+		$jtis = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT jti FROM `{$wpdb->prefix}rsl_tokens` WHERE order_id = %d AND revoked = 0",
+				$order_id
+			)
+		);
+
 		$result = $wpdb->update(
 			$table_name,
 			array( 'revoked' => 1 ),
@@ -339,6 +353,8 @@ class RSL_OAuth_Client {
 			array( '%d' ),
 			array( '%d', '%d' )
 		);
+
+		$this->clear_token_cache( $jtis );
 
 		return $result ? $result : 0;
 	}
@@ -354,6 +370,13 @@ class RSL_OAuth_Client {
 
 		$table_name = $wpdb->prefix . 'rsl_tokens';
 
+		$jtis = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT jti FROM `{$wpdb->prefix}rsl_tokens` WHERE subscription_id = %d AND revoked = 0",
+				$subscription_id
+			)
+		);
+
 		$result = $wpdb->update(
 			$table_name,
 			array( 'revoked' => 1 ),
@@ -365,7 +388,20 @@ class RSL_OAuth_Client {
 			array( '%d', '%d' )
 		);
 
+		$this->clear_token_cache( $jtis );
+
 		return $result ? $result : 0;
+	}
+
+	/**
+	 * Clear cached revocation status for the given token IDs
+	 *
+	 * @param array $jtis JWT IDs
+	 */
+	private function clear_token_cache( $jtis ) {
+		foreach ( (array) $jtis as $jti ) {
+			wp_cache_delete( 'rsl_token_' . $jti, 'rsl_tokens' );
+		}
 	}
 
 	/**

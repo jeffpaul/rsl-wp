@@ -153,9 +153,11 @@ class TestRSLServer extends TestCase {
 	public function test_validate_license_token() {
 		$now     = time();
 		$payload = array(
-			'iss'     => 'http://example.org',
-			'aud'     => 'example.org',
+			'typ'     => 'rsl_license',
+			'iss'     => home_url(),
+			'aud'     => wp_parse_url( home_url(), PHP_URL_HOST ),
 			'sub'     => 'test-client',
+			'jti'     => wp_generate_uuid4(),
 			'iat'     => $now,
 			'nbf'     => $now,
 			'exp'     => $now + 3600,
@@ -173,8 +175,32 @@ class TestRSLServer extends TestCase {
 		$method     = $reflection->getMethod( 'validate_license_token' );
 		$method->setAccessible( true );
 
-		$result = $method->invoke( $this->server, $token );
+		$gated = array( array( 'id' => 1 ) );
+
+		$result = $method->invoke( $this->server, $token, $gated );
 		$this->assertTrue( $result );
+
+		// Token for a different license than the one gating the URL is rejected
+		$result = $method->invoke( $this->server, $token, array( array( 'id' => 2 ) ) );
+		$this->assertFalse( $result );
+
+		// No gating license at all is rejected
+		$result = $method->invoke( $this->server, $token );
+		$this->assertFalse( $result );
+
+		// Missing mandatory claims are rejected
+		foreach ( array( 'typ', 'aud', 'exp', 'jti', 'pattern', 'iss' ) as $claim ) {
+			$partial = $payload;
+			unset( $partial[ $claim ] );
+			$result = $method->invoke( $this->server, $this->generate_test_jwt( $partial ), $gated );
+			$this->assertFalse( $result, "Token without '$claim' must be rejected" );
+		}
+
+		// Wrong issuer or token type is rejected
+		$wrong = array_merge( $payload, array( 'iss' => 'https://evil.example' ) );
+		$this->assertFalse( $method->invoke( $this->server, $this->generate_test_jwt( $wrong ), $gated ) );
+		$wrong = array_merge( $payload, array( 'typ' => 'payment_proof' ) );
+		$this->assertFalse( $method->invoke( $this->server, $this->generate_test_jwt( $wrong ), $gated ) );
 	}
 
 	/**
@@ -255,13 +281,21 @@ class TestRSLServer extends TestCase {
 		$result  = $method->invoke( $this->server, $license );
 		$this->assertTrue( $result );
 
-		// Free type
+		// Priced license is never free, whatever its payment_type
 		$license = array(
 			'amount'       => 99.99,
 			'payment_type' => 'free',
 		);
 		$result  = $method->invoke( $this->server, $license );
-		$this->assertTrue( $result );
+		$this->assertFalse( $result );
+
+		// Paid attribution
+		$license = array(
+			'amount'       => 10,
+			'payment_type' => 'attribution',
+		);
+		$result  = $method->invoke( $this->server, $license );
+		$this->assertFalse( $result );
 
 		// Attribution type
 		$license = array(
