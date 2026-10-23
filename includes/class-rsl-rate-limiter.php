@@ -111,36 +111,68 @@ class RSL_Rate_Limiter {
 
 	/**
 	 * Get client identifier for rate limiting
-	 * Uses IP address and User-Agent as fallback if no client_id
+	 * Uses the client IP address only. Client-controlled headers such as
+	 * User-Agent are deliberately excluded so they cannot be rotated to
+	 * obtain a fresh rate limit bucket.
 	 *
 	 * @return string
 	 */
 	private function get_client_identifier() {
-		$ip = $this->get_client_ip();
-		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
-
-		return $ip . '|' . md5( $ua );
+		return $this->get_client_ip();
 	}
 
 	/**
-	 * Get client IP address with proxy support
+	 * Get client IP address
+	 *
+	 * Uses REMOTE_ADDR by default. Forwarded headers (X-Forwarded-For,
+	 * X-Real-IP) are only honored when REMOTE_ADDR is a trusted proxy, as
+	 * configured via the `rsl_trusted_proxies` filter. In that case the
+	 * right-most X-Forwarded-For entry that is not itself a trusted proxy
+	 * is used, since entries to its left are client-supplied.
 	 *
 	 * @return string
 	 */
 	private function get_client_ip() {
-		if ( ! empty( $_SERVER['HTTP_CLIENT_IP'] ) ) {
-			// IP from shared internet.
-			return sanitize_text_field( wp_unslash( $_SERVER['HTTP_CLIENT_IP'] ) );
-		} elseif ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
-			// IP passed from a proxy. Can contain multiple IPs, use the first.
-			$ips = explode( ',', sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) );
-			return trim( $ips[0] );
-		} elseif ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
-			// IP from the remote address.
-			return sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
+		$remote_addr = isset( $_SERVER['REMOTE_ADDR'] ) ? trim( sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) ) : '';
+
+		if ( ! filter_var( $remote_addr, FILTER_VALIDATE_IP ) ) {
+			return 'unknown';
 		}
 
-		return 'unknown';
+		/**
+		 * Filter the list of trusted reverse proxy IP addresses.
+		 *
+		 * Forwarded client IP headers are only trusted when the request
+		 * arrives directly from one of these addresses.
+		 *
+		 * @param array $trusted_proxies List of trusted proxy IP addresses.
+		 */
+		$trusted_proxies = (array) apply_filters( 'rsl_trusted_proxies', array() );
+
+		if ( empty( $trusted_proxies ) || ! in_array( $remote_addr, $trusted_proxies, true ) ) {
+			return $remote_addr;
+		}
+
+		if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+			$ips = array_map( 'trim', explode( ',', sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) ) );
+
+			// Walk from the right (closest hop) and return the first untrusted, valid IP.
+			for ( $i = count( $ips ) - 1; $i >= 0; $i-- ) {
+				if ( ! filter_var( $ips[ $i ], FILTER_VALIDATE_IP ) ) {
+					break;
+				}
+				if ( ! in_array( $ips[ $i ], $trusted_proxies, true ) ) {
+					return $ips[ $i ];
+				}
+			}
+		} elseif ( ! empty( $_SERVER['HTTP_X_REAL_IP'] ) ) {
+			$real_ip = trim( sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_REAL_IP'] ) ) );
+			if ( filter_var( $real_ip, FILTER_VALIDATE_IP ) ) {
+				return $real_ip;
+			}
+		}
+
+		return $remote_addr;
 	}
 
 	/**
@@ -162,24 +194,6 @@ class RSL_Rate_Limiter {
 	 */
 	private function get_time_window() {
 		return apply_filters( 'rsl_rate_limit_window', 60 );
-	}
-
-	/**
-	 * Check if IP should be exempt from rate limiting
-	 *
-	 * @param string $ip
-	 * @return bool
-	 */
-	private function is_exempt_ip( $ip ) {
-		$exempt_ips = apply_filters(
-			'rsl_rate_limit_exempt_ips',
-			array(
-				'127.0.0.1',
-				'::1',
-			)
-		);
-
-		return in_array( $ip, $exempt_ips );
 	}
 
 	/**

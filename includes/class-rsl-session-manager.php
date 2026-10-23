@@ -36,7 +36,7 @@ class RSL_Session_Manager {
 	 * @return array Session data
 	 */
 	public function create_session( $license, $client, $options = array() ) {
-		$session_id = wp_generate_uuid4();
+		$session_id = $this->generate_session_id();
 		$now        = time();
 
 		$session_data = array(
@@ -51,7 +51,7 @@ class RSL_Session_Manager {
 			'proof'          => null,
 			'processor_id'   => null,
 			'processor_data' => array(),
-			'options'        => $options,
+			'options'        => $this->sanitize_options( $options ),
 		);
 
 		// Store session server-side (MCP pattern)
@@ -63,6 +63,46 @@ class RSL_Session_Manager {
 			'polling_url' => rest_url( 'rsl-olp/v1/session/' . $session_id ),
 			'expires_at'  => gmdate( 'c', $session_data['expires_at'] ),
 		);
+	}
+
+	/**
+	 * Generate a cryptographically secure session ID formatted as a UUIDv4
+	 *
+	 * @return string
+	 */
+	private function generate_session_id() {
+		$bytes    = random_bytes( 16 );
+		$bytes[6] = chr( ( ord( $bytes[6] ) & 0x0f ) | 0x40 ); // Version 4.
+		$bytes[8] = chr( ( ord( $bytes[8] ) & 0x3f ) | 0x80 ); // RFC 4122 variant.
+
+		return vsprintf( '%s%s-%s-%s-%s-%s%s%s', str_split( bin2hex( $bytes ), 4 ) );
+	}
+
+	/**
+	 * Reduce client-supplied session options to a known allowlist
+	 *
+	 * Session creation is unauthenticated, so arbitrary request parameters
+	 * must never be persisted as-is.
+	 *
+	 * @param array $options Raw options (typically request params).
+	 * @return array Sanitized options.
+	 */
+	private function sanitize_options( $options ) {
+		if ( ! is_array( $options ) ) {
+			return array();
+		}
+
+		$sanitized = array();
+
+		if ( isset( $options['license_id'] ) && is_scalar( $options['license_id'] ) ) {
+			$sanitized['license_id'] = absint( $options['license_id'] );
+		}
+
+		if ( isset( $options['client'] ) && is_scalar( $options['client'] ) ) {
+			$sanitized['client'] = substr( sanitize_text_field( (string) $options['client'] ), 0, 255 );
+		}
+
+		return $sanitized;
 	}
 
 	/**
@@ -230,35 +270,27 @@ class RSL_Session_Manager {
 	public function cleanup_expired_sessions() {
 		global $wpdb;
 
-		$expired_time = time() - $this->session_ttl;
+		$now = time();
 
-		// Try cache first to avoid expensive queries
-		$cache_key        = 'rsl_expired_sessions_' . gmdate( 'Y-m-d-H', $expired_time );
-		$expired_sessions = wp_cache_get( $cache_key, 'rsl_sessions' );
+		// Session options are PHP-serialized, so expiry must be checked in PHP
+		// rather than parsed out of option_value in SQL. Batch-limit the scan.
+		$batch_size   = (int) apply_filters( 'rsl_session_cleanup_batch_size', 500 );
+		$option_names = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_id ASC LIMIT %d",
+				$wpdb->esc_like( 'rsl_session_' ) . '%',
+				max( 1, $batch_size )
+			)
+		);
 
-		if ( $expired_sessions === false ) {
-			// Find expired sessions
-			$expired_sessions = $wpdb->get_col(
-				$wpdb->prepare(
-					"SELECT option_name FROM {$wpdb->options}
-                 WHERE option_name LIKE %s
-                 AND option_value LIKE %s
-                 AND CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(option_value, '\"expires_at\":', -1), ',', 1) AS UNSIGNED) < %d",
-					'rsl_session_%',
-					'%expires_at%',
-					$expired_time
-				)
-			);
+		$expired_sessions = array();
+		foreach ( (array) $option_names as $option_name ) {
+			$session = get_option( $option_name );
 
-			// Cache results for 30 minutes (only cache successful queries)
-			if ( $expired_sessions !== null && ! $wpdb->last_error ) {
-				wp_cache_set( $cache_key, $expired_sessions, 'rsl_sessions', 1800 );
+			if ( ! is_array( $session ) || ! isset( $session['expires_at'] ) || (int) $session['expires_at'] < $now ) {
+				delete_option( $option_name );
+				$expired_sessions[] = $option_name;
 			}
-		}
-
-		// Delete expired sessions
-		foreach ( $expired_sessions as $option_name ) {
-			delete_option( $option_name );
 		}
 
 		if ( ! empty( $expired_sessions ) ) {

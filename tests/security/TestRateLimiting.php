@@ -356,6 +356,34 @@ class TestRateLimiting extends TestCase {
 	}
 
 	/**
+	 * Test that spoofed forwarding headers and User-Agent cannot bypass IP rate limiting
+	 *
+	 * @covers RSL_Rate_Limiter::check_rate_limit
+	 */
+	public function test_ip_rate_limiting_ignores_spoofed_headers() {
+		$_SERVER['REMOTE_ADDR'] = '192.168.1.101';
+
+		$endpoint = 'session';
+
+		for ( $i = 1; $i <= 20; $i++ ) {
+			$_SERVER['HTTP_X_FORWARDED_FOR'] = '203.0.113.' . $i;
+			$_SERVER['HTTP_CLIENT_IP']       = '198.51.100.' . $i;
+			$_SERVER['HTTP_USER_AGENT']      = 'agent-' . $i;
+
+			$result = $this->rate_limiter->check_rate_limit( $endpoint );
+			$this->assertNotInstanceOf( 'WP_Error', $result, "Request {$i} should be allowed" );
+		}
+
+		$_SERVER['HTTP_X_FORWARDED_FOR'] = '203.0.113.250';
+		$_SERVER['HTTP_USER_AGENT']      = 'agent-new';
+
+		$result = $this->rate_limiter->check_rate_limit( $endpoint );
+		$this->assertInstanceOf( 'WP_Error', $result );
+
+		unset( $_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['HTTP_CLIENT_IP'], $_SERVER['HTTP_USER_AGENT'] );
+	}
+
+	/**
 	 * Test concurrent request handling
 	 *
 	 * @covers RSL_Rate_Limiter::check_rate_limit
