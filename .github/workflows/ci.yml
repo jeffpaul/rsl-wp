@@ -139,13 +139,6 @@ jobs:
       with:
         php-version: '8.1'
 
-    - name: Install WP-CLI
-      run: |
-        curl -O https://raw.githubusercontent.com/wp-cli/wp-cli/v2.8.1/utils/wp-completion.bash
-        wget https://github.com/wp-cli/wp-cli/releases/download/v2.8.1/wp-cli-2.8.1.phar
-        chmod +x wp-cli-2.8.1.phar
-        sudo mv wp-cli-2.8.1.phar /usr/local/bin/wp
-
     - name: Check plugin header
       run: |
         # Verify plugin header is valid

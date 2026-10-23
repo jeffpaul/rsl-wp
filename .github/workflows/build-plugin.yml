@@ -1,7 +1,7 @@
 name: Build Plugin ZIP
 
 permissions:
-  contents: write
+  contents: read
 
 # Tagged releases are built and published by release.yml; this is for ad-hoc builds.
 on:
@@ -20,6 +20,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v7
+      with:
+        persist-credentials: false
 
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
@@ -38,20 +40,31 @@ jobs:
 
     - name: Determine version
       id: version
+      env:
+        INPUT_VERSION: ${{ github.event.inputs.version }}
       run: |
-        if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.version }}" != "dev" ]]; then
-          VERSION="${{ github.event.inputs.version }}"
-        elif [[ "${{ github.ref_type }}" == "tag" ]]; then
-          VERSION=${GITHUB_REF#refs/tags/v}
+        if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n "$INPUT_VERSION" && "$INPUT_VERSION" != "dev" ]]; then
+          VERSION="${INPUT_VERSION#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "Invalid version format: $VERSION (expected: x.y.z, x.y.z-suffix, or dev)"
+            exit 1
+          fi
+        elif [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "Invalid version format in tag: $VERSION"
+            exit 1
+          fi
         else
           VERSION="dev-$(git rev-parse --short HEAD)"
         fi
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         echo "Building version: $VERSION"
 
     - name: Update plugin version
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
       run: |
-        VERSION="${{ steps.version.outputs.version }}"
         # Update version in main plugin file
         sed -i "s/Version: .*/Version: $VERSION/" rsl-wp.php
         sed -i "s/RSL_PLUGIN_VERSION\", \".*\"/RSL_PLUGIN_VERSION\", \"$VERSION\"/" rsl-wp.php
@@ -62,8 +75,9 @@ jobs:
         fi
 
     - name: Create plugin ZIP
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
       run: |
-        VERSION="${{ steps.version.outputs.version }}"
         ZIP_NAME="rsl-licensing-$VERSION.zip"
         
         # Create temporary directory for plugin
@@ -92,8 +106,10 @@ jobs:
         retention-days: 30
 
     - name: Create checksums
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
       run: |
-        ZIP_NAME="rsl-licensing-${{ steps.version.outputs.version }}.zip"
+        ZIP_NAME="rsl-licensing-$VERSION.zip"
         
         # Create checksums
         sha256sum "$ZIP_NAME" > "${ZIP_NAME}.sha256"
@@ -103,18 +119,6 @@ jobs:
         echo "" >> checksums.txt
         echo "**SHA256:** \`$(cat ${ZIP_NAME}.sha256)\`" >> checksums.txt
         echo "**MD5:** \`$(cat ${ZIP_NAME}.md5)\`" >> checksums.txt
-
-    - name: Upload to GitHub Release
-      if: github.event_name == 'release'
-      uses: softprops/action-gh-release@v3
-      with:
-        files: |
-          rsl-licensing-*.zip
-          rsl-licensing-*.sha256
-          rsl-licensing-*.md5
-        body_path: checksums.txt
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     outputs:
       version: ${{ steps.version.outputs.version }}

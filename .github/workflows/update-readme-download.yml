@@ -27,6 +27,10 @@ jobs:
         LATEST=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest")
         
         VERSION=$(echo "$LATEST" | jq -r '.tag_name' | sed 's/^v//')
+        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+          echo "Invalid version format in latest release tag: $VERSION"
+          exit 1
+        fi
         DOWNLOAD_URL=$(echo "$LATEST" | jq -r '.assets[] | select(.name | test("rsl-licensing.*\\.zip$")) | .browser_download_url')
         RELEASE_URL=$(echo "$LATEST" | jq -r '.html_url')
         FILE_SIZE=$(echo "$LATEST" | jq -r '.assets[] | select(.name | test("rsl-licensing.*\\.zip$")) | .size')
@@ -50,12 +54,12 @@ jobs:
         echo "File size: $HUMAN_SIZE"
 
     - name: Update README.md with download links
+      env:
+        VERSION: ${{ steps.release.outputs.version }}
+        DOWNLOAD_URL: ${{ steps.release.outputs.download_url }}
+        RELEASE_URL: ${{ steps.release.outputs.release_url }}
+        FILE_SIZE: ${{ steps.release.outputs.file_size }}
       run: |
-        VERSION="${{ steps.release.outputs.version }}"
-        DOWNLOAD_URL="${{ steps.release.outputs.download_url }}"
-        RELEASE_URL="${{ steps.release.outputs.release_url }}"
-        FILE_SIZE="${{ steps.release.outputs.file_size }}"
-        
         # Create the download section
         cat > download_section.md << EOF
         ## 📥 Quick Download
@@ -113,9 +117,9 @@ jobs:
         echo "✅ README.md updated with download links"
 
     - name: Update version badges
+      env:
+        VERSION: ${{ steps.release.outputs.version }}
       run: |
-        VERSION="${{ steps.release.outputs.version }}"
-        
         # Update version badge if it exists
         if grep -q "https://img.shields.io/badge/Version-" README.md; then
           sed -i "s|https://img.shields.io/badge/Version-[^-]*-|https://img.shields.io/badge/Version-$VERSION-|g" README.md
@@ -127,6 +131,8 @@ jobs:
         fi
 
     - name: Commit README updates
+      env:
+        VERSION: ${{ steps.release.outputs.version }}
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
@@ -135,7 +141,7 @@ jobs:
           echo "No changes to README.md"
         else
           git add README.md
-          git commit -m "📥 Update download links for v${{ steps.release.outputs.version }}
+          git commit -m "📥 Update download links for v${VERSION}
           
           - Updated direct download URL in README
           - Added file size information  
