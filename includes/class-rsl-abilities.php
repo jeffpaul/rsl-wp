@@ -134,7 +134,7 @@ class RSL_Abilities {
 			'rsl-licensing/update-license',
 			array(
 				'label'               => __( 'Update RSL License', 'rsl-wp' ),
-				'description'         => __( 'Updates an existing RSL license configuration. Modifies license terms, permissions, payment settings, and other properties while maintaining license history and validation.', 'rsl-wp' ),
+				'description'         => __( 'Updates an existing RSL license configuration in place. Modifies license terms, permissions, payment settings, and other properties after validating and sanitizing the input. Previous values are not retained.', 'rsl-wp' ),
 				'input_schema'        => array(
 					'type'                 => 'object',
 					'properties'           => array(

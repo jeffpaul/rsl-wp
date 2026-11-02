@@ -158,6 +158,20 @@ add_action('rsl_license_created', function($license_id, $license_data) {
 }, 10, 2);
 ```
 
+#### `rsl_license_updated`
+Triggered after a license is updated, when at least one stored value changed. Receives the license ID, the sanitized fields that were written (including `updated_at`), and the license as it was before the update. Licenses are updated in place, so listen here if you need a history of changes:
+
+```php
+add_action('rsl_license_updated', function($license_id, $changes, $old_license) {
+    // Record what changed and what it was before
+    foreach ($changes as $field => $value) {
+        if (isset($old_license[$field]) && $old_license[$field] != $value) {
+            error_log("RSL license $license_id: $field changed from {$old_license[$field]} to $value");
+        }
+    }
+}, 10, 3);
+```
+
 #### `rsl_payment_completed`
 Triggered when a payment is completed:
 
@@ -451,6 +465,8 @@ RSL server discovery endpoint.
 
 ### `GET /rsl-license/{id}/`
 Individual license XML output.
+
+The response carries a strong `ETag` whose value is the quoted SHA-256 hex digest of the XML body, so a client can record exactly which version of a license it saw. Send it back in `If-None-Match` to get a `304 Not Modified` with no body when the license hasn't changed.
 
 **Response:**
 ```xml

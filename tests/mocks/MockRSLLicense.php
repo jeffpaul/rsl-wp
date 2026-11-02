@@ -81,9 +81,12 @@ if ( ! class_exists( 'RSL_License' ) ) {
 				return false;
 			}
 
+			$old_license           = self::$licenses[ $id ];
 			$data                  = $this->sanitize_license_data( $data );
 			$data['updated_at']    = date( 'Y-m-d H:i:s' );
 			self::$licenses[ $id ] = array_merge( self::$licenses[ $id ], $data );
+
+			do_action( 'rsl_license_updated', $id, $data, $old_license );
 			return true;
 		}
 

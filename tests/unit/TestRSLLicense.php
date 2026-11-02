@@ -207,6 +207,44 @@ class TestRSLLicense extends TestCase {
 	}
 
 	/**
+	 * Test that updating a license fires rsl_license_updated with the new fields and the old license
+	 *
+	 * @covers RSL_License::update_license
+	 */
+	public function test_update_license_fires_updated_action() {
+		$license_id = $this->create_test_license( array( 'name' => 'Before' ) );
+
+		\Brain\Monkey\Actions\expectDone( 'rsl_license_updated' )
+			->once()
+			->with(
+				$license_id,
+				\Mockery::on(
+					function ( $data ) {
+						return 'After' === $data['name'] && ! empty( $data['updated_at'] );
+					}
+				),
+				\Mockery::on(
+					function ( $old_license ) {
+						return 'Before' === $old_license['name'];
+					}
+				)
+			);
+
+		$this->assertTrue( $this->license_handler->update_license( $license_id, array( 'name' => 'After' ) ) );
+	}
+
+	/**
+	 * Test that a failed update does not fire rsl_license_updated
+	 *
+	 * @covers RSL_License::update_license
+	 */
+	public function test_update_nonexistent_license_does_not_fire_updated_action() {
+		\Brain\Monkey\Actions\expectDone( 'rsl_license_updated' )->never();
+
+		$this->assertFalse( $this->license_handler->update_license( 99999, array( 'name' => 'After' ) ) );
+	}
+
+	/**
 	 * Test license deletion
 	 *
 	 * @covers RSL_License::delete_license
