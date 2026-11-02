@@ -119,18 +119,17 @@ add_action('rsl_register_payment_processors', function($registry) {
 
 ```php
 // Filter example
-add_filter('rsl_license_price', function($price, $license_id, $client) {
-    if (str_contains($client, '.edu')) {
-        return $price * 0.5; // Educational discount
-    }
-    return $price;
-}, 10, 3);
+add_filter('rsl_token_ttl', function($ttl) {
+    return 15 * MINUTE_IN_SECONDS;
+});
 
-// Action example  
-add_action('rsl_payment_completed', function($order_id, $license_id, $client) {
-    // Custom post-payment processing
+// Action example
+add_action('rsl_license_updated', function($license_id, $changes, $old_license) {
+    // React to a license change
 }, 10, 3);
 ```
+
+The hooks that exist are listed in `docs/DEVELOPER.md`. When you add a hook, document it there too.
 
 ### AJAX Handlers
 

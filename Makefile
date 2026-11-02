@@ -16,17 +16,17 @@ install: ## Install dependencies
 
 test: ## Run all tests
 	@echo "Running all tests..."
-	vendor/bin/phpunit tests/unit/TestBasicFunctionality.php tests/unit/TestRSLLicense.php
+	vendor/bin/phpunit --testsuite unit
 	@echo "✅ Tests completed"
 
 test-unit: ## Run unit tests only
 	@echo "Running unit tests..."
-	vendor/bin/phpunit tests/unit/TestBasicFunctionality.php tests/unit/TestRSLLicense.php --testsuite=unit
+	vendor/bin/phpunit --testsuite unit
 	@echo "✅ Unit tests completed"
 
 test-coverage: ## Run tests with coverage
 	@echo "Running tests with coverage..."
-	vendor/bin/phpunit --coverage-html coverage tests/unit/TestBasicFunctionality.php tests/unit/TestRSLLicense.php
+	vendor/bin/phpunit --coverage-html coverage --testsuite unit
 	@echo "✅ Coverage report generated at coverage/index.html"
 
 test-quick: ## Run quick smoke tests
