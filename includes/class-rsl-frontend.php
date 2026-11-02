@@ -61,8 +61,7 @@ class RSL_Frontend {
 				header( 'Content-Type: application/rsl+xml; charset=UTF-8' );
 				header( 'Cache-Control: public, max-age=3600' );
 
-                // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-				echo $this->license_handler->generate_rsl_xml( $license_data );
+				RSL_Server::send_rsl_xml( $this->license_handler->generate_rsl_xml( $license_data ) );
 				exit;
 			}
 		}

@@ -285,6 +285,7 @@ class RSL_License {
 			return false;
 		}
 
+		$old_license        = $this->get_license( $id );
 		$data               = $this->sanitize_license_data( $data );
 		$data['updated_at'] = current_time( 'mysql' );
 
@@ -302,6 +303,20 @@ class RSL_License {
 		}
 
 		$this->invalidate_cache( $id );
+
+		// $wpdb->update() returns the number of rows changed, so 0 means no such license or nothing changed.
+		if ( 0 < $result ) {
+			/**
+			 * Fires after a license has been updated.
+			 *
+			 * @since 0.0.6
+			 *
+			 * @param int        $id          License ID.
+			 * @param array      $data        Sanitized fields that were written, including updated_at.
+			 * @param array|null $old_license The license as it was before the update.
+			 */
+			do_action( 'rsl_license_updated', $id, $data, $old_license );
+		}
 
 		return false !== $result;
 	}

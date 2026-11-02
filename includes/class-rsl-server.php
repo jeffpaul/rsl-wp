@@ -136,8 +136,72 @@ class RSL_Server {
 		header( 'Cache-Control: public, max-age=3600' );
 		$this->add_cors_headers();
 
-        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-		echo $this->license_handler->generate_rsl_xml( $license_data );
+		self::send_rsl_xml( $this->license_handler->generate_rsl_xml( $license_data ) );
+	}
+
+	/**
+	 * Send an RSL XML document with a strong ETag, or a bodiless 304 when the
+	 * client's If-None-Match already names this exact document.
+	 *
+	 * The ETag is the quoted SHA-256 hex digest of the document, so clients can
+	 * record which version of a license they saw and check it against the body.
+	 *
+	 * @param string $xml Generated RSL XML document.
+	 */
+	public static function send_rsl_xml( $xml ) {
+		$etag = self::get_etag( $xml );
+		header( 'ETag: ' . $etag );
+
+		$if_none_match = isset( $_SERVER['HTTP_IF_NONE_MATCH'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_IF_NONE_MATCH'] ) ) : '';
+		if ( self::etag_matches( $if_none_match, $etag ) ) {
+			status_header( 304 );
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		echo $xml;
+	}
+
+	/**
+	 * Strong ETag for a response body: its SHA-256 hex digest, quoted.
+	 *
+	 * @param string $body Response body.
+	 * @return string ETag header value.
+	 */
+	public static function get_etag( $body ) {
+		return '"' . hash( 'sha256', $body ) . '"';
+	}
+
+	/**
+	 * Whether an If-None-Match header value matches an ETag, using the weak
+	 * comparison RFC 9110 requires for If-None-Match.
+	 *
+	 * @param string $if_none_match If-None-Match header value.
+	 * @param string $etag          Current ETag, quoted.
+	 * @return bool True if the client already has this representation.
+	 */
+	public static function etag_matches( $if_none_match, $etag ) {
+		$if_none_match = trim( $if_none_match );
+
+		if ( '' === $if_none_match ) {
+			return false;
+		}
+
+		if ( '*' === $if_none_match ) {
+			return true;
+		}
+
+		foreach ( explode( ',', $if_none_match ) as $candidate ) {
+			$candidate = trim( $candidate );
+			if ( 0 === strpos( $candidate, 'W/' ) ) {
+				$candidate = substr( $candidate, 2 );
+			}
+			if ( $candidate === $etag ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private function serve_rsl_feed() {
