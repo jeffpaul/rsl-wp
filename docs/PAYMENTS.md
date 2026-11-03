@@ -386,25 +386,20 @@ Use WooCommerce's test mode:
 ### WordPress Hooks
 
 ```php
-// Custom pricing logic
-add_filter('rsl_license_price', function($price, $license_id, $client) {
-    // Educational discount
-    if (str_contains($client, '.edu')) {
-        return $price * 0.5;
-    }
-    return $price;
-}, 10, 3);
+// Register a custom payment processor
+add_action('rsl_register_payment_processors', function($registry) {
+    $registry->register_processor(new My_Payment_Processor());
+});
 
-// Payment completion hook
-add_action('rsl_payment_completed', function($order_id, $license_id, $client) {
-    // Send notification email
-    wp_mail(
-        get_option('admin_email'),
-        'New RSL License Purchase',
-        "License $license_id purchased by $client"
-    );
-}, 10, 3);
+// Let orders created by hand (with no OAuth client recorded) be redeemed for a token.
+// By default only the client that went through the token endpoint's checkout can redeem an order,
+// so this loosens a security check: anyone who has the order key could then redeem it.
+add_filter('rsl_verify_order_client', function($verified, $order, $client_id, $license, $bound_client) {
+    return $verified || '' === $bound_client;
+}, 10, 5);
 ```
+
+See [the hooks reference in DEVELOPER.md](DEVELOPER.md#wordpress-hooks--filters) for every available hook.
 
 ### External License Servers
 

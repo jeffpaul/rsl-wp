@@ -115,48 +115,74 @@ add_filter('rsl_supported_post_types', function($post_types) {
 });
 ```
 
-#### `rsl_license_price`
-Modify license pricing dynamically:
+#### `rsl_token_ttl`
+Change how long license access tokens stay valid, in seconds (default `3600`):
 
 ```php
-add_filter('rsl_license_price', function($price, $license_id, $client) {
-    // Educational discount
-    if (str_contains($client, '.edu')) {
-        return $price * 0.5;
-    }
-    // Volume discount for enterprise
-    if (str_contains($client, 'enterprise')) {
-        return $price * 0.7;
-    }
-    return $price;
-}, 10, 3);
+add_filter('rsl_token_ttl', function($ttl) {
+    return 15 * MINUTE_IN_SECONDS;
+});
 ```
 
-#### `rsl_xml_output`
-Filter generated RSL XML before output:
+#### `rsl_verify_order_client`
+Decide whether a WooCommerce order or subscription can be redeemed for a token by the authenticated OAuth client. By default only the client recorded at the token endpoint's checkout can redeem it, so orders created any other way are rejected:
 
 ```php
-add_filter('rsl_xml_output', function($xml, $license_id) {
-    // Add custom elements or modify XML structure
-    return $xml;
-}, 10, 2);
+add_filter('rsl_verify_order_client', function($verified, $order, $client_id, $license, $bound_client) {
+    // Also accept orders with no client recorded, such as orders created by hand.
+    // Anyone who has the order key can then redeem it.
+    return $verified || '' === $bound_client;
+}, 10, 5);
+```
+
+#### `rsl_cors_allowed_origins`
+Origins that get an `Access-Control-Allow-Origin` header on license XML, `/.well-known/rsl/` and OLP responses (default: the site's own URL and `https://rslcollective.org`):
+
+```php
+add_filter('rsl_cors_allowed_origins', function($origins) {
+    $origins[] = 'https://trusted-partner.example';
+    return $origins;
+});
+```
+
+#### `rsl_rate_limits`
+Requests allowed per client IP per minute on the OLP endpoints (defaults: `token` 30, `introspect` 100, `session` 20):
+
+```php
+add_filter('rsl_rate_limits', function($limits) {
+    $limits['token'] = 60;
+    return $limits;
+});
+```
+
+#### `rsl_rate_limit_window`
+How long each rate-limit counter lives, in seconds (default `60`). Counters also reset at every minute boundary, so only values below 60 change anything:
+
+```php
+add_filter('rsl_rate_limit_window', function($seconds) {
+    return 30;
+});
+```
+
+#### `rsl_trusted_proxies`
+IP addresses of reverse proxies or a CDN in front of the site. Rate limiting only trusts `X-Forwarded-For` and `X-Real-IP` when a request arrives from one of these addresses (default: none, so the connecting IP is always used):
+
+```php
+add_filter('rsl_trusted_proxies', function($proxies) {
+    return ['10.0.0.2', '10.0.0.3'];
+});
+```
+
+#### `rsl_session_cleanup_batch_size`
+How many stored payment sessions are checked for expiry each time WordPress runs its daily `wp_scheduled_delete` cleanup (default `500`):
+
+```php
+add_filter('rsl_session_cleanup_batch_size', function($size) {
+    return 2000;
+});
 ```
 
 ### Available Actions
-
-#### `rsl_license_created`
-Triggered when a new license is created:
-
-```php
-add_action('rsl_license_created', function($license_id, $license_data) {
-    // Send notification, log creation, etc.
-    wp_mail(
-        get_option('admin_email'),
-        'New RSL License Created',
-        "License ID: $license_id"
-    );
-}, 10, 2);
-```
 
 #### `rsl_license_updated`
 Triggered after a license is updated, when at least one stored value changed. Receives the license ID, the sanitized fields that were written (including `updated_at`), and the license as it was before the update. Licenses are updated in place, so listen here if you need a history of changes:
@@ -172,24 +198,13 @@ add_action('rsl_license_updated', function($license_id, $changes, $old_license) 
 }, 10, 3);
 ```
 
-#### `rsl_payment_completed`
-Triggered when a payment is completed:
+#### `rsl_register_payment_processors`
+Fires when the payment registry loads, with the registry instance. Register custom payment processors here. See [Creating Custom Payment Processors](#creating-custom-payment-processors) for a full processor class:
 
 ```php
-add_action('rsl_payment_completed', function($order_id, $license_id, $client) {
-    // Custom post-payment processing
-    update_option("rsl_stats_payments", get_option("rsl_stats_payments", 0) + 1);
-}, 10, 3);
-```
-
-#### `rsl_token_generated`
-Triggered when an access token is generated:
-
-```php
-add_action('rsl_token_generated', function($token, $license_id, $client) {
-    // Log token generation for analytics
-    error_log("RSL token generated for $client on license $license_id");
-}, 10, 3);
+add_action('rsl_register_payment_processors', function($registry) {
+    $registry->register_processor(new My_Payment_Processor());
+});
 ```
 
 ## URL Pattern Matching
