@@ -12,6 +12,7 @@ class RSL_RSS {
 		$this->license_handler = new RSL_License();
 
 		add_action( 'rss2_ns', array( $this, 'add_rsl_namespace' ) );
+		add_action( 'rss2_item', array( $this, 'add_rsl_to_rss_item' ) );
 
 		// Add custom RSS feed for RSL licenses
 		add_action( 'init', array( $this, 'add_rsl_feed' ) );
@@ -48,6 +49,10 @@ class RSL_RSS {
 	}
 
 	public function add_rsl_feed() {
+		if ( ! get_option( 'rsl_enable_rss_feed', 1 ) ) {
+			return;
+		}
+
 		add_feed( 'rsl-licenses', array( $this, 'rsl_feed_template' ) );
 	}
 
@@ -57,6 +62,11 @@ class RSL_RSS {
 	}
 
 	public function rsl_feed_template() {
+		if ( ! get_option( 'rsl_enable_rss_feed', 1 ) ) {
+			status_header( 404 );
+			return;
+		}
+
 		$licenses = $this->license_handler->get_licenses( array( 'active' => 1 ) );
 
 		header( 'Content-Type: application/rss+xml; charset=UTF-8' );
@@ -129,159 +139,70 @@ class RSL_RSS {
 	}
 
 	private function output_rss_rsl_content( $license_data, $post = null ) {
-		// Generate content URL
-		$content_url = $license_data['content_url'];
-
-		if ( empty( $content_url ) && $post ) {
-			$content_url = get_permalink( $post->ID );
-		} elseif ( empty( $content_url ) ) {
-			$content_url = home_url( '/' );
+		if ( $post ) {
+			$license_data['content_url'] = $this->get_post_content_url_for_rss( $license_data, $post );
 		}
 
-		echo "\n    <rsl:content url=\"" . esc_attr( $content_url ) . '"';
+		$xml = $this->license_handler->generate_rsl_xml(
+			$license_data,
+			array(
+				'standalone' => false,
+				'root'       => false,
+				'prefix'     => 'rsl:',
+			)
+		);
 
-		if ( ! empty( $license_data['server_url'] ) ) {
-			echo ' server="' . esc_attr( $license_data['server_url'] ) . '"';
+		echo $xml; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- generator escapes values.
+	}
+
+	/**
+	 * Use post-specific content URL overrides only when they remain on this site's origin.
+	 *
+	 * @param array  $license_data License data prepared for this post.
+	 * @param object $post         Feed post.
+	 * @return string Same-origin content URL.
+	 */
+	private function get_post_content_url_for_rss( $license_data, $post ) {
+		$content_url = isset( $license_data['content_url'] ) ? trim( $license_data['content_url'] ) : '';
+		$permalink   = get_permalink( $post->ID );
+
+		if ( '' === $content_url ) {
+			return $permalink;
 		}
 
-		if ( ! empty( $license_data['encrypted'] ) && $license_data['encrypted'] == 1 ) {
-			echo ' encrypted="true"';
+		$site_origin    = wp_parse_url( home_url( '/' ) );
+		$content_origin = wp_parse_url( $content_url );
+
+		if ( ! is_array( $site_origin ) || ! is_array( $content_origin ) ) {
+			return $permalink;
 		}
 
-		if ( ! empty( $license_data['lastmod'] ) ) {
-			echo ' lastmod="' . esc_attr( gmdate( 'c', strtotime( $license_data['lastmod'] ) ) ) . '"';
+		// Root-relative URLs are same-origin; other relative forms can resolve against a feed path.
+		if ( ! isset( $content_origin['host'] ) && ! isset( $content_origin['scheme'] ) ) {
+			return 0 === strpos( $content_url, '/' ) && 0 !== strpos( $content_url, '//' )
+				? $content_url
+				: $permalink;
 		}
 
-		echo ">\n";
+		$site_scheme    = strtolower( $site_origin['scheme'] ?? '' );
+		$content_scheme = strtolower( $content_origin['scheme'] ?? $site_scheme );
+		$site_host      = strtolower( $site_origin['host'] ?? '' );
+		$content_host   = strtolower( $content_origin['host'] ?? '' );
+		$site_port      = $site_origin['port'] ?? ( 'https' === $site_scheme ? 443 : 80 );
+		$content_port   = $content_origin['port'] ?? ( 'https' === $content_scheme ? 443 : 80 );
 
-		// Schema information
-		if ( ! empty( $license_data['schema_url'] ) ) {
-			echo '      <rsl:schema>' . esc_html( $license_data['schema_url'] ) . "</rsl:schema>\n";
+		if ( $site_scheme !== $content_scheme || $site_host !== $content_host || $site_port !== $content_port ) {
+			return $permalink;
 		}
 
-		// Copyright information
-		if ( ! empty( $license_data['copyright_holder'] ) ) {
-			echo '      <rsl:copyright';
-			if ( ! empty( $license_data['copyright_type'] ) ) {
-				echo ' type="' . esc_attr( $license_data['copyright_type'] ) . '"';
-			}
-			if ( ! empty( $license_data['contact_email'] ) ) {
-				echo ' contactEmail="' . esc_attr( $license_data['contact_email'] ) . '"';
-			}
-			if ( ! empty( $license_data['contact_url'] ) ) {
-				echo ' contactUrl="' . esc_attr( $license_data['contact_url'] ) . '"';
-			}
-			echo '>' . esc_html( $license_data['copyright_holder'] ) . "</rsl:copyright>\n";
-		}
-
-		// Terms URL
-		if ( ! empty( $license_data['terms_url'] ) ) {
-			echo '      <rsl:terms>' . esc_html( $license_data['terms_url'] ) . "</rsl:terms>\n";
-		}
-
-		// License information
-		echo "      <rsl:license>\n";
-
-		// Permits
-		if ( ! empty( $license_data['permits_usage'] ) ) {
-			echo '        <rsl:permits type="usage">' . esc_html( $license_data['permits_usage'] ) . "</rsl:permits>\n";
-		}
-
-		if ( ! empty( $license_data['permits_user'] ) ) {
-			echo '        <rsl:permits type="user">' . esc_html( $license_data['permits_user'] ) . "</rsl:permits>\n";
-		}
-
-		if ( ! empty( $license_data['permits_geo'] ) ) {
-			echo '        <rsl:permits type="geo">' . esc_html( $license_data['permits_geo'] ) . "</rsl:permits>\n";
-		}
-
-		// Prohibits
-		if ( ! empty( $license_data['prohibits_usage'] ) ) {
-			echo '        <rsl:prohibits type="usage">' . esc_html( $license_data['prohibits_usage'] ) . "</rsl:prohibits>\n";
-		}
-
-		if ( ! empty( $license_data['prohibits_user'] ) ) {
-			echo '        <rsl:prohibits type="user">' . esc_html( $license_data['prohibits_user'] ) . "</rsl:prohibits>\n";
-		}
-
-		if ( ! empty( $license_data['prohibits_geo'] ) ) {
-			echo '        <rsl:prohibits type="geo">' . esc_html( $license_data['prohibits_geo'] ) . "</rsl:prohibits>\n";
-		}
-
-		// Payment information
-		if ( ! empty( $license_data['payment_type'] ) && $license_data['payment_type'] !== 'free' ) {
-			echo '        <rsl:payment type="' . esc_attr( $license_data['payment_type'] ) . "\">\n";
-
-			if ( ! empty( $license_data['standard_url'] ) ) {
-				echo '          <rsl:standard>' . esc_html( $license_data['standard_url'] ) . "</rsl:standard>\n";
-			}
-
-			if ( ! empty( $license_data['custom_url'] ) ) {
-				echo '          <rsl:custom>' . esc_html( $license_data['custom_url'] ) . "</rsl:custom>\n";
-			}
-
-			if ( ! empty( $license_data['amount'] ) && $license_data['amount'] > 0 ) {
-				echo '          <rsl:amount currency="' . esc_attr( $license_data['currency'] ) . '">' .
-					esc_html( $license_data['amount'] ) . "</rsl:amount>\n";
-			}
-
-			echo "        </rsl:payment>\n";
-		} else {
-			echo "        <rsl:payment type=\"free\"/>\n";
-		}
-
-		// Legal information
-		if ( ! empty( $license_data['warranty'] ) ) {
-			echo '        <rsl:legal type="warranty">' . esc_html( $license_data['warranty'] ) . "</rsl:legal>\n";
-		}
-
-		if ( ! empty( $license_data['disclaimer'] ) ) {
-			echo '        <rsl:legal type="disclaimer">' . esc_html( $license_data['disclaimer'] ) . "</rsl:legal>\n";
-		}
-
-		echo "      </rsl:license>\n";
-		echo "    </rsl:content>\n";
+		return $content_url;
 	}
 
 	private function get_license_xml_url( $license_id ) {
-		return add_query_arg( 'rsl_license', $license_id, home_url() );
+		return RSL_Server::get_license_url( $license_id );
 	}
 
 	public function get_rsl_feed_url() {
-		return home_url( 'feed/rsl-licenses/' );
-	}
-
-	public function enhance_existing_feeds() {
-		// This method can be called to enhance existing RSS feeds with RSL data
-		// It's automatically hooked into WordPress RSS generation
-
-		if ( ! get_option( 'rsl_enable_rss_feed', 1 ) ) {
-			return;
-		}
-
-		// Add RSL metadata to standard WordPress feeds
-		add_action(
-			'rss_head',
-			function () {
-				echo "<!-- Enhanced with RSL Licensing -->\n";
-			}
-		);
-
-		add_action(
-			'rss2_head',
-			function () {
-				echo "<!-- Enhanced with RSL Licensing -->\n";
-
-				// Add global license information to feed header if available
-				$global_license_id = get_option( 'rsl_global_license_id', 0 );
-				if ( $global_license_id > 0 ) {
-					$license_data = $this->license_handler->get_license( $global_license_id );
-					if ( $license_data && $license_data['active'] ) {
-						$xml_url = $this->get_license_xml_url( $global_license_id );
-						echo '<license>' . esc_url( $xml_url ) . "</license>\n";
-					}
-				}
-			}
-		);
+		return RSL_Server::get_feed_url();
 	}
 }

@@ -5,6 +5,31 @@ All notable changes to the RSL for WordPress plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Public, nonce-free license and feed URLs for canonical discovery (`get_license_url()`, `get_feed_url()`), plus `<link rel="license" type="application/rsl+xml">` in HTML output.
+- RSS items now carry their own `<rsl:content>` block through the shared RSL serializer.
+- `rsl_require_client_auth`, `rsl_builtin_server_url`, and `rsl_enable_builtin_cap` filters.
+- RSL 1.0 document fields: `max-age`, payment `<accepts>`, `<reporting>`, `attestation`/`contact`/`proof` legal declarations, `<alternate>` representations, and inline Schema.org JSON-LD.
+- Site-wide `/rsl.xml` document that groups licenses sharing a `content_url` into one `<content>` with multiple `<license>` children.
+
+### Changed
+- RSL 1.0 vocabulary: usage tokens are `all`, `ai-all`, `ai-train`, `ai-input`, `ai-index`, and `search`; payment types are `free`, `purchase`, `subscription`, `training`, `crawl`, `use`, `contribution`, and `attribution`. Existing rows and legacy tokens are migrated automatically.
+- Token, introspect, and CAP responses now use RSL 1.0 shapes: `token_type: License`, `{error, error_description}`, `WWW-Authenticate: License`, and `Link: rel="license"` challenges.
+- `/token` requires `grant_type=client_credentials` and client authentication by default. Session proofs are redeemed once via `session_id`.
+- `lastmod` is stored and emitted in GMT; existing local-time rows are converted once during upgrade.
+- Built-in server is advertised through the `server` attribute; `encrypted="true"` is only advertised for licenses with an external license server.
+- `/key` is `POST` only and returns `501` until key delivery is implemented.
+- RSL documents emit a `max-age` attribute (default 30 days) and omit `reporting` until both a category and profile are configured.
+
+### Fixed
+- RSS feed setting now disables both standard-feed annotations and the dedicated license feed; per-post RSS overrides are retained only when same-origin.
+- Media RSL metadata now uses the attachment URL, emits a valid `<rsl:rsl>` XMP fragment, embeds XMP directly in JPEGs when possible, and labels sidecar files as sidecars instead of claiming every file is embedded.
+- License edit links are nonce-protected.
+- Public discovery URLs no longer require a nonce.
+- CORS and rate-limit headers no longer emit after output has started.
+
 ## [0.0.4-alpha] - 2025-09-13
 
 ### Added

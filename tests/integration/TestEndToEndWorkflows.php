@@ -123,7 +123,6 @@ class TestEndToEndWorkflows extends TestCase {
 		// Decode and verify token payload
 		$reflection    = new \ReflectionClass( $this->server );
 		$decode_method = $reflection->getMethod( 'jwt_decode_token' );
-		$decode_method->setAccessible( true );
 
 		$payload = $decode_method->invoke( $this->server, $token );
 
@@ -135,7 +134,6 @@ class TestEndToEndWorkflows extends TestCase {
 
 		// Step 5: Use token for content access simulation
 		$validate_method = $reflection->getMethod( 'validate_license_token' );
-		$validate_method->setAccessible( true );
 
 		$_SERVER['REQUEST_URI'] = '/e2e-free-content';
 		$license                = $this->license_handler->get_license( $license_id );
@@ -611,7 +609,6 @@ class TestEndToEndWorkflows extends TestCase {
 			// Use the URL matching logic from server
 			$reflection = new \ReflectionClass( $this->server );
 			$method     = $reflection->getMethod( 'find_matching_licenses' );
-			$method->setAccessible( true );
 
 			$matching_licenses = $method->invoke( $this->server, $url );
 

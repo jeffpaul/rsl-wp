@@ -57,7 +57,6 @@ class TestWooCommerceIntegration extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'is_wc_active' );
-		$method->setAccessible( true );
 
 		$is_active = $method->invoke( $this->server );
 
@@ -77,7 +76,6 @@ class TestWooCommerceIntegration extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'is_wcs_active' );
-		$method->setAccessible( true );
 
 		$is_active = $method->invoke( $this->server );
 
@@ -109,7 +107,6 @@ class TestWooCommerceIntegration extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'ensure_wc_product_for_license' );
-		$method->setAccessible( true );
 
 		$product_id = $method->invoke( $this->server, $license );
 
@@ -151,7 +148,6 @@ class TestWooCommerceIntegration extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'ensure_wc_product_for_license' );
-		$method->setAccessible( true );
 
 		// Create product first time
 		$product_id1 = $method->invoke( $this->server, $license );
@@ -193,7 +189,6 @@ class TestWooCommerceIntegration extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'ensure_wc_product_for_license' );
-		$method->setAccessible( true );
 
 		$result = $method->invoke( $this->server, $license );
 
@@ -466,7 +461,6 @@ class TestWooCommerceIntegration extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'ensure_wc_product_for_license' );
-		$method->setAccessible( true );
 
 		$product_id = $method->invoke( $this->server, $license );
 
@@ -552,7 +546,6 @@ class TestWooCommerceIntegration extends TestCase {
 		);
 
 		$method = ( new \ReflectionClass( $this->server ) )->getMethod( 'ensure_wc_product_for_license' );
-		$method->setAccessible( true );
 
 		$product_id = $method->invoke( $this->server, $license );
 		$this->assertIsInt( $product_id );
@@ -592,9 +585,7 @@ class TestWooCommerceIntegration extends TestCase {
 
 		$reflection    = new \ReflectionClass( $this->server );
 		$verify_client = $reflection->getMethod( 'verify_order_client' );
-		$verify_client->setAccessible( true );
 		$verify_paid = $reflection->getMethod( 'verify_order_payment' );
-		$verify_paid->setAccessible( true );
 
 		$this->assertTrue( $verify_client->invoke( $this->server, $order, $item, 'rsl_owner', $license, $product->get_id() ) );
 		$this->assertFalse( $verify_client->invoke( $this->server, $order, $item, 'rsl_attacker', $license, $product->get_id() ) );

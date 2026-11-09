@@ -106,7 +106,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 							<?php endif; ?>
 						</td>
 						<td>
-							<a href="<?php echo esc_url( admin_url( 'admin.php?page=rsl-add-license&edit=' . $license['id'] ) ); ?>" 
+							<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=rsl-add-license&edit=' . $license['id'] ), 'edit_license' ) ); ?>"
 								class="button button-small">
 								<?php esc_html_e( 'Edit', 'rsl-wp' ); ?>
 							</a>

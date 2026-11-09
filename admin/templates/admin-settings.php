@@ -118,19 +118,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 				</td>
 			</tr>
 			
-			<tr>
-				<th scope="row">
-					<label for="rsl_default_namespace"><?php esc_html_e( 'RSL Namespace', 'rsl-wp' ); ?></label>
-				</th>
-				<td>
-					<input type="url" name="rsl_default_namespace" id="rsl_default_namespace" 
-							value="<?php echo esc_attr( get_option( 'rsl_default_namespace', 'https://rslstandard.org/rsl' ) ); ?>" 
-							class="regular-text" />
-					<p class="description">
-						<?php esc_html_e( 'RSL XML namespace URI. Use default unless you have a custom implementation.', 'rsl-wp' ); ?>
-					</p>
-				</td>
-			</tr>
 		</table>
 		
 		<?php submit_button(); ?>

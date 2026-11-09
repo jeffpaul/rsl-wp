@@ -29,6 +29,11 @@ class RSL_Frontend {
 			return;
 		}
 
+		$xml_url = $this->get_license_xml_url( $license_data['id'] );
+		if ( $xml_url ) {
+			echo '<link rel="license" type="application/rsl+xml" href="' . esc_url( $xml_url ) . '" />' . "\n";
+		}
+
 		$this->output_embedded_rsl( $license_data );
 	}
 
@@ -120,7 +125,7 @@ class RSL_Frontend {
 	}
 
 	private function output_embedded_rsl( $license_data ) {
-		$namespace = get_option( 'rsl_default_namespace', 'https://rslstandard.org/rsl' );
+		$namespace = defined( 'RSL_NAMESPACE' ) ? RSL_NAMESPACE : 'https://rslstandard.org/rsl';
 
 		echo "\n<!-- RSL Licensing Information -->\n";
 		echo '<script type="application/rsl+xml">' . "\n";
@@ -140,8 +145,7 @@ class RSL_Frontend {
 	}
 
 	private function get_license_xml_url( $license_id ) {
-		$base_url = trailingslashit( home_url() );
-		return add_query_arg( 'rsl_license', $license_id, $base_url );
+		return RSL_Server::get_license_url( $license_id );
 	}
 
 	private function output_rsl_feed() {
@@ -170,21 +174,16 @@ class RSL_Frontend {
 				echo '      <pubDate>' . esc_html( gmdate( 'r', strtotime( $license['updated_at'] ) ) ) . '</pubDate>' . "\n";
 			}
 
-			// Add RSL content as RSS extension
 			$rsl_xml = $this->license_handler->generate_rsl_xml(
 				$license,
 				array(
-					'namespace'  => 'https://rslstandard.org/rsl',
 					'standalone' => false,
+					'root'       => false,
+					'prefix'     => 'rsl:',
 				)
 			);
 
-			// Remove the opening rsl tag and add proper namespace prefixes
-			$rsl_xml = str_replace( '<rsl xmlns="https://rslstandard.org/rsl">', '', $rsl_xml );
-			$rsl_xml = str_replace( '</rsl>', '', $rsl_xml );
-			$rsl_xml = preg_replace( '/<(\/?)(content|license|permits|prohibits|payment|standard|custom|amount|legal|schema|copyright|terms)/', '<$1rsl:$2', $rsl_xml );
-
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			echo $rsl_xml;
 			echo '    </item>' . "\n";
 		}
@@ -261,6 +260,6 @@ class RSL_Frontend {
 	}
 
 	public function get_rsl_feed_url() {
-		return add_query_arg( 'rsl_feed', '1', home_url() );
+		return RSL_Server::get_feed_url();
 	}
 }

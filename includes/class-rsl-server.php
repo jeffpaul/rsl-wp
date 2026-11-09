@@ -11,6 +11,73 @@ class RSL_Server {
 	 */
 	const LICENSE_TOKEN_TYPE = 'rsl_license';
 
+	/**
+	 * Shared server instance.
+	 *
+	 * @var RSL_Server|null
+	 */
+	private static $instance = null;
+
+	/**
+	 * Get the shared server instance.
+	 *
+	 * @return RSL_Server
+	 */
+	public static function get_instance() {
+		if ( null === self::$instance ) {
+			self::$instance = new self();
+		}
+		return self::$instance;
+	}
+
+	/**
+	 * Public, cacheable URL for a single RSL license document.
+	 *
+	 * Uses the pretty rewrite when permalinks are enabled and falls back to the
+	 * registered `rsl_license_id` query var otherwise. No nonce is required:
+	 * license documents are public, anonymous, cacheable resources.
+	 *
+	 * @param int $license_id License ID.
+	 * @return string
+	 */
+	public static function get_license_url( $license_id ) {
+		$license_id = intval( $license_id );
+
+		if ( get_option( 'permalink_structure' ) ) {
+			$url = home_url( 'rsl-license/' . $license_id . '/' );
+		} else {
+			$url = add_query_arg( 'rsl_license_id', $license_id, home_url( '/' ) );
+		}
+
+		/**
+		 * Filter the public license document URL.
+		 *
+		 * @param string $url        License document URL.
+		 * @param int    $license_id License ID.
+		 */
+		return apply_filters( 'rsl_license_url', $url, $license_id );
+	}
+
+	/**
+	 * Public URL for the RSL license catalogue feed.
+	 *
+	 * @return string
+	 */
+	public static function get_feed_url() {
+		if ( get_option( 'permalink_structure' ) ) {
+			$url = home_url( 'feed/rsl-licenses/' );
+		} else {
+			$url = add_query_arg( 'feed', 'rsl-licenses', home_url( '/' ) );
+		}
+
+		/**
+		 * Filter the RSL license feed URL.
+		 *
+		 * @param string $url Feed URL.
+		 */
+		return apply_filters( 'rsl_feed_url', $url );
+	}
+
 	private $license_handler;
 	private $payment_registry;
 	private $session_manager;
@@ -46,6 +113,7 @@ class RSL_Server {
 
 		// Bind WooCommerce orders created from a token-endpoint checkout to the requesting RSL client
 		add_filter( 'woocommerce_add_cart_item_data', array( $this, 'capture_checkout_reference' ), 10, 2 );
+		add_filter( 'woocommerce_add_cart_item_data', array( $this, 'capture_session_checkout' ), 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'persist_checkout_client' ), 10, 4 );
 	}
 
@@ -67,12 +135,19 @@ class RSL_Server {
 			'index.php?rsl_wellknown=1',
 			'top'
 		);
+
+		add_rewrite_rule(
+			'^rsl\.xml$',
+			'index.php?rsl_document=1',
+			'top'
+		);
 	}
 
 	public function add_query_vars( $vars ) {
 		$vars[] = 'rsl_license_id';
 		$vars[] = 'rsl_feed';
 		$vars[] = 'rsl_wellknown';
+		$vars[] = 'rsl_document';
 		return $vars;
 	}
 
@@ -94,6 +169,12 @@ class RSL_Server {
 		// Handle .well-known/rsl discovery
 		if ( get_query_var( 'rsl_wellknown' ) ) {
 			$this->serve_wellknown_rsl();
+			exit;
+		}
+
+		// Handle the site-wide RSL document
+		if ( get_query_var( 'rsl_document' ) ) {
+			$this->serve_rsl_document();
 			exit;
 		}
 	}
@@ -209,6 +290,21 @@ class RSL_Server {
 		$rsl_rss->rsl_feed_template();
 	}
 
+	private function serve_rsl_document() {
+		$licenses = $this->license_handler->get_licenses( array( 'active' => 1 ) );
+
+		if ( empty( $licenses ) ) {
+			status_header( 404 );
+			exit;
+		}
+
+		header( 'Content-Type: application/rsl+xml; charset=UTF-8' );
+		header( 'Cache-Control: public, max-age=3600' );
+		$this->add_cors_headers();
+
+		self::send_rsl_xml( $this->license_handler->generate_rsl_document( $licenses ) );
+	}
+
 	private function serve_wellknown_rsl() {
 		$site_info = array(
 			'site_name'      => get_bloginfo( 'name' ),
@@ -217,11 +313,12 @@ class RSL_Server {
 			'plugin_version' => RSL_PLUGIN_VERSION,
 			'licenses'       => array(),
 			'feeds'          => array(
-				'rsl_feed' => home_url( 'feed/rsl-licenses/' ),
+				'rsl_feed' => self::get_feed_url(),
 				'rss_feed' => get_feed_link(),
 			),
 			'endpoints'      => array(
 				'license_xml' => home_url( 'rsl-license/{id}/' ),
+				'document'    => home_url( 'rsl.xml' ),
 				'wellknown'   => home_url( '.well-known/rsl/' ),
 			),
 		);
@@ -234,7 +331,7 @@ class RSL_Server {
 				'name'         => $license['name'],
 				'content_url'  => $license['content_url'],
 				'payment_type' => $license['payment_type'],
-				'xml_url'      => home_url( 'rsl-license/' . $license['id'] . '/' ),
+				'xml_url'      => self::get_license_url( $license['id'] ),
 			);
 		}
 
@@ -302,7 +399,7 @@ class RSL_Server {
 			'rsl-olp/v1',
 			'/key',
 			array(
-				'methods'             => 'GET',
+				'methods'             => 'POST',
 				'callback'            => array( $this, 'olp_get_key' ),
 				'permission_callback' => '__return_true',
 			)
@@ -376,59 +473,184 @@ class RSL_Server {
 
 	// ===== RSL Open Licensing Protocol (OLP) Endpoints =====
 
+	/**
+	 * Build a spec-shaped OLP error response.
+	 *
+	 * @param string $code    OLP error code.
+	 * @param string $message Human-readable description.
+	 * @param int    $status  HTTP status.
+	 * @return WP_REST_Response
+	 */
+	private function olp_error( $code, $message, $status ) {
+		$this->add_cors_headers();
+		return new \WP_REST_Response(
+			array(
+				'error'             => $code,
+				'error_description' => $message,
+			),
+			$status
+		);
+	}
+
+	/**
+	 * Convert an internal WP_Error to a spec-shaped OLP error response.
+	 *
+	 * @param WP_Error $error Internal error.
+	 * @return WP_REST_Response
+	 */
+	private function olp_convert_error( $error ) {
+		if ( ! is_wp_error( $error ) ) {
+			return $error;
+		}
+
+		$allowed = array(
+			'invalid_request'        => 400,
+			'invalid_client'         => 401,
+			'unauthorized_client'    => 403,
+			'invalid_license'        => 400,
+			'invalid_resource'       => 400,
+			'unsupported_grant_type' => 400,
+			'invalid_token'          => 401,
+			'server_error'           => 500,
+		);
+
+		$map = array(
+			'external_server'           => 'invalid_license',
+			'payment_not_available'     => 'server_error',
+			'not_implemented'           => 'server_error',
+			'payment_required'          => 'invalid_license',
+			'order_not_found'           => 'invalid_request',
+			'missing_order'             => 'invalid_request',
+			'product_mismatch'          => 'invalid_license',
+			'order_client_mismatch'     => 'unauthorized_client',
+			'subscription_mismatch'     => 'invalid_license',
+			'subscription_inactive'     => 'invalid_license',
+			'subscription_client_mismatch' => 'unauthorized_client',
+			'subscriptions_unavailable' => 'server_error',
+			'currency_mismatch'         => 'invalid_license',
+			'insufficient_payment'      => 'invalid_license',
+			'invalid_order'             => 'invalid_license',
+		);
+
+		$code   = $error->get_error_code();
+		$code   = isset( $map[ $code ] ) ? $map[ $code ] : $code;
+		$code   = isset( $allowed[ $code ] ) ? $code : 'invalid_request';
+		$status = $allowed[ $code ];
+
+		return $this->olp_error( $code, $error->get_error_message(), $status );
+	}
+
+	/**
+	 * Extract the resource URL from a submitted `<license>` XML fragment.
+	 *
+	 * @param string $xml License XML.
+	 * @return string
+	 */
+	private function extract_license_resource( $xml ) {
+		if ( preg_match( '/<content\b[^>]*\burl\s*=\s*(["\'])(.*?)\1/i', (string) $xml, $matches ) ) {
+			return html_entity_decode( $matches[2], ENT_QUOTES, 'UTF-8' );
+		}
+		return '';
+	}
+
+	/**
+	 * Find the active license that covers a resource URL.
+	 *
+	 * @param string $resource Resource URL.
+	 * @return array|null
+	 */
+	private function find_license_for_resource( $resource ) {
+		if ( ! is_string( $resource ) || '' === $resource ) {
+			return null;
+		}
+
+		foreach ( $this->license_handler->get_licenses( array( 'active' => 1 ) ) as $license ) {
+			if ( $this->url_matches_pattern( $resource, $license['content_url'] ) ) {
+				return $license;
+			}
+		}
+
+		return null;
+	}
+
 	public function olp_issue_token( \WP_REST_Request $req ) {
 		// Rate limiting check first
 		$rate_check = $this->rate_limiter->check_rate_limit( 'token' );
 		if ( is_wp_error( $rate_check ) ) {
 			$error_data = $rate_check->get_error_data();
-			if ( isset( $error_data['headers'] ) ) {
+			if ( isset( $error_data['headers'] ) && ! headers_sent() ) {
 				foreach ( $error_data['headers'] as $header => $value ) {
 					header( $header . ': ' . $value );
 				}
 			}
-			return $rate_check;
+			return $this->olp_convert_error( $rate_check );
 		}
 
-		// OAuth 2.0 Client Credentials Authentication (Required for paid licenses)
-		$license_id = intval( $req->get_param( 'license_id' ) );
+		// One-time redemption of a signed payment proof for a session. The proof
+		// itself authenticates the request, so no OAuth client credentials are
+		// required for this branch.
+		$session_id_param = sanitize_text_field( (string) $req->get_param( 'session_id' ) );
+		if ( '' !== $session_id_param ) {
+			return $this->olp_redeem_session_proof( $session_id_param );
+		}
 
-		$license = $this->license_handler->get_license( $license_id );
+		$grant_type = sanitize_text_field( (string) $req->get_param( 'grant_type' ) );
+		if ( '' === $grant_type ) {
+			return $this->olp_error( 'invalid_request', 'The grant_type parameter is required', 400 );
+		}
+		if ( 'client_credentials' !== $grant_type ) {
+			return $this->olp_error( 'unsupported_grant_type', 'Only client_credentials is supported', 400 );
+		}
+
+		$resource    = esc_url_raw( (string) $req->get_param( 'resource' ) );
+		$license_xml = trim( (string) $req->get_param( 'license' ) );
+		$license     = null;
+
+		if ( '' !== $license_xml ) {
+			$xml_resource = $this->extract_license_resource( $license_xml );
+			if ( '' === $resource ) {
+				$resource = $xml_resource;
+			}
+			$license = $this->find_license_for_resource( '' !== $xml_resource ? $xml_resource : $resource );
+		} else {
+			// Backwards-compatible lookup for existing integrations.
+			$license = $this->license_handler->get_license( intval( $req->get_param( 'license_id' ) ) );
+		}
+
 		if ( ! $license || ! $license['active'] ) {
-			return new \WP_Error( 'invalid_license', 'The license is invalid or not available', array( 'status' => 400 ) );
+			return $this->olp_error( 'invalid_license', 'The license is invalid or not available', 400 );
 		}
 
-		// Check if this is a paid license that requires authentication
-		$requires_auth = ! $this->is_free_license( $license );
+		if ( '' === $resource ) {
+			$resource = $license['content_url'];
+		}
+
+		if ( ! $this->url_matches_pattern( $resource, $license['content_url'] ) ) {
+			return $this->olp_error( 'invalid_resource', 'Resource not covered by this license', 400 );
+		}
+
+		// RSL 1.0 requires client authentication on /token for every payment type.
+		$requires_auth = (bool) apply_filters( 'rsl_require_client_auth', true, $license, $req );
 		$client_id     = null;
 
 		if ( $requires_auth ) {
 			$auth_result = $this->authenticate_oauth_client( $req );
 			if ( is_wp_error( $auth_result ) ) {
-				return $auth_result;
+				return $this->olp_convert_error( $auth_result );
 			}
 			$client_id = $auth_result['client_id'];
 		}
 
-		$client = sanitize_text_field( $req->get_param( 'client' ) );
+		$client          = sanitize_text_field( $req->get_param( 'client' ) );
+		$create_checkout = filter_var( $req->get_param( 'create_checkout' ), FILTER_VALIDATE_BOOLEAN );
+		$order_key       = sanitize_text_field( $req->get_param( 'wc_order_key' ) );
+		$sub_id          = intval( $req->get_param( 'wc_subscription_id' ) );
+
 		if ( $requires_auth ) {
-			// Paid licenses: the token subject is always the authenticated client.
+			// The token subject is always the authenticated client.
 			$client = $client_id;
 		} elseif ( ! $client ) {
 			$client = 'anonymous';
-		}
-
-		$resource        = esc_url_raw( $req->get_param( 'resource' ) ); // Resource parameter for validation
-		$create_checkout = filter_var( $req->get_param( 'create_checkout' ), FILTER_VALIDATE_BOOLEAN );
-		$order_key       = sanitize_text_field( $req->get_param( 'wc_order_key' ) ); // Woo order key flow
-		$sub_id          = intval( $req->get_param( 'wc_subscription_id' ) );        // optional for subs
-
-		// Validate resource parameter (required by RSL OLP spec)
-		if ( ! $resource ) {
-			return new \WP_Error( 'invalid_request', 'The resource parameter is required', array( 'status' => 400 ) );
-		}
-
-		if ( ! $this->url_matches_pattern( $resource, $license['content_url'] ) ) {
-			return new \WP_Error( 'invalid_resource', 'Resource not covered by this license', array( 'status' => 400 ) );
 		}
 
 		// If license points to an external server, refuse and forward
@@ -437,14 +659,7 @@ class RSL_Server {
 			$here  = wp_parse_url( home_url(), PHP_URL_HOST );
 			$there = wp_parse_url( $srv, PHP_URL_HOST );
 			if ( $there && $there !== $here ) {
-				return new \WP_Error(
-					'external_server',
-					'Managed by external server',
-					array(
-						'status'     => 409,
-						'server_url' => $srv,
-					)
-				);
+				return $this->olp_error( 'invalid_license', 'Managed by external license server: ' . $srv, 400 );
 			}
 		}
 
@@ -460,7 +675,7 @@ class RSL_Server {
 
 		// Paid license (amount > 0) → require WooCommerce
 		if ( ! $this->is_wc_active() ) {
-			return new \WP_Error( 'payment_not_available', 'Paid licensing (amount > 0) requires WooCommerce', array( 'status' => 501 ) );
+			return $this->olp_error( 'server_error', 'Paid licensing (amount > 0) requires WooCommerce', 500 );
 		}
 
 		// Purchase (one-time) — simplest happy path
@@ -485,28 +700,28 @@ class RSL_Server {
 			}
 
 			if ( ! $order_key ) {
-				return new \WP_Error( 'missing_order', 'Provide wc_order_key or set create_checkout=true', array( 'status' => 400 ) );
+				return $this->olp_error( 'invalid_request', 'Provide wc_order_key or set create_checkout=true', 400 );
 			}
 
 			$order_id = wc_get_order_id_by_order_key( $order_key );
 			if ( ! $order_id ) {
-				return new \WP_Error( 'order_not_found', 'Order not found', array( 'status' => 404 ) );
+				return $this->olp_error( 'invalid_request', 'Order not found', 400 );
 			}
 
 			$order = wc_get_order( $order_id );
 			if ( ! $order || ! $order->is_paid() ) {
-				return new \WP_Error( 'payment_required', 'Order not paid', array( 'status' => 402 ) );
+				return $this->olp_error( 'invalid_license', 'Order not paid', 403 );
 			}
 
 			// Verify the product is in the order
 			$order_item = $this->find_order_item_for_product( $order, $product_id );
 			if ( ! $order_item ) {
-				return new \WP_Error( 'product_mismatch', 'Order does not contain the license product', array( 'status' => 403 ) );
+				return $this->olp_error( 'invalid_license', 'Order does not contain the license product', 403 );
 			}
 
 			// Verify the order belongs to the authenticated client
 			if ( ! $this->verify_order_client( $order, $order_item, $client_id, $license, $product_id ) ) {
-				return new \WP_Error( 'order_client_mismatch', 'Order was not purchased by this client', array( 'status' => 403 ) );
+				return $this->olp_error( 'unauthorized_client', 'Order was not purchased by this client', 403 );
 			}
 
 			// Verify what was actually paid
@@ -524,7 +739,7 @@ class RSL_Server {
 		// Subscription (if Woo Subscriptions is present)
 		if ( $ptype === 'subscription' ) {
 			if ( ! $this->is_wcs_active() ) {
-				return new \WP_Error( 'subscriptions_unavailable', 'WooCommerce Subscriptions not active', array( 'status' => 501 ) );
+				return $this->olp_error( 'server_error', 'WooCommerce Subscriptions not active', 500 );
 			}
 			$product_id = $this->ensure_wc_product_for_license( $license );
 			if ( is_wp_error( $product_id ) ) {
@@ -544,26 +759,26 @@ class RSL_Server {
 			}
 
 			if ( ! $sub_id ) {
-				return new \WP_Error( 'missing_subscription', 'Provide wc_subscription_id or set create_checkout=true', array( 'status' => 400 ) );
+				return $this->olp_error( 'invalid_request', 'Provide wc_subscription_id or set create_checkout=true', 400 );
 			}
 
 			// Minimal subscription check (pseudo; refine as needed)
 			$subscription = wcs_get_subscription( $sub_id );
 			if ( ! $subscription || ! $subscription->has_product( $product_id ) ) {
-				return new \WP_Error( 'subscription_mismatch', 'Subscription does not cover this license', array( 'status' => 403 ) );
+				return $this->olp_error( 'invalid_license', 'Subscription does not cover this license', 403 );
 			}
 			if ( ! $subscription->has_status( 'active' ) ) {
-				return new \WP_Error( 'subscription_inactive', 'Subscription is not active', array( 'status' => 402 ) );
+				return $this->olp_error( 'invalid_license', 'Subscription is not active', 403 );
 			}
 
 			$subscription_item = $this->find_order_item_for_product( $subscription, $product_id );
 			if ( ! $subscription_item ) {
-				return new \WP_Error( 'subscription_mismatch', 'Subscription does not cover this license', array( 'status' => 403 ) );
+				return $this->olp_error( 'invalid_license', 'Subscription does not cover this license', 403 );
 			}
 
 			// Verify the subscription belongs to the authenticated client (subscription or parent order)
 			if ( ! $this->verify_order_client( $subscription, $subscription_item, $client_id, $license, $product_id ) ) {
-				return new \WP_Error( 'subscription_client_mismatch', 'Subscription was not purchased by this client', array( 'status' => 403 ) );
+				return $this->olp_error( 'unauthorized_client', 'Subscription was not purchased by this client', 403 );
 			}
 
 			// Verify the recurring amount and currency
@@ -579,59 +794,149 @@ class RSL_Server {
 		}
 
 		// Other paid models not implemented locally → advise external server
-		return new \WP_Error( 'not_implemented', 'Use an external license server for this payment type', array( 'status' => 501 ) );
+		return $this->olp_error( 'server_error', 'Use an external license server for this payment type', 500 );
+	}
+
+	/**
+	 * Exchange a session-bound signed payment proof for a license token.
+	 *
+	 * The proof can only be redeemed once; the session is marked completed and
+	 * the proof is cleared immediately before minting.
+	 *
+	 * @param string $session_id Session ID.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private function olp_redeem_session_proof( $session_id ) {
+		$session = $this->session_manager->get_session( $session_id );
+		if ( ! is_array( $session ) ) {
+			return $this->olp_error( 'invalid_request', 'The session is unknown or expired', 400 );
+		}
+
+		if ( 'proof_ready' !== $session['status'] || empty( $session['proof'] ) ) {
+			return $this->olp_error( 'invalid_request', 'This session has no redeemable payment proof', 400 );
+		}
+
+		$license = $this->license_handler->get_license( intval( $session['license_id'] ) );
+		if ( ! $license || ! $license['active'] ) {
+			return $this->olp_error( 'invalid_license', 'The license is invalid or not available', 400 );
+		}
+
+		$payload = $this->jwt_decode_token( $session['proof'] );
+		if ( is_wp_error( $payload ) ) {
+			return $this->olp_error( 'invalid_token', 'The payment proof is invalid or expired', 401 );
+		}
+
+		$valid = isset( $payload['sub'], $payload['session_id'], $payload['license_id'], $payload['exp'] )
+			&& 'woocommerce_payment_proof' === $payload['sub']
+			&& hash_equals( (string) $session_id, (string) $payload['session_id'] )
+			&& (int) $license['id'] === (int) $payload['license_id']
+			&& time() <= (int) $payload['exp'];
+
+		if ( ! $valid ) {
+			return $this->olp_error( 'invalid_token', 'The payment proof is invalid or expired', 401 );
+		}
+
+		// Consume the proof before minting so it cannot be replayed.
+		$this->session_manager->update_session_status(
+			$session_id,
+			'completed',
+			array(
+				'proof'       => null,
+				'consumed_at' => time(),
+				'order_id'    => isset( $payload['order_id'] ) ? intval( $payload['order_id'] ) : null,
+			)
+		);
+
+		$metadata = array(
+			'track_token' => true,
+			'session_id'  => $session_id,
+		);
+		if ( ! empty( $payload['order_id'] ) ) {
+			$metadata['order_id'] = intval( $payload['order_id'] );
+		}
+
+		$out = $this->mint_token_for_license( $license, $session['client'], $metadata );
+		$this->add_cors_headers();
+		$this->rate_limiter->add_rate_limit_headers( 'token', $session['client'] );
+		return rest_ensure_response( $out );
 	}
 
 	public function olp_introspect( \WP_REST_Request $req ) {
-		// Rate limiting check first
 		$rate_check = $this->rate_limiter->check_rate_limit( 'introspect' );
 		if ( is_wp_error( $rate_check ) ) {
 			$error_data = $rate_check->get_error_data();
-			if ( isset( $error_data['headers'] ) ) {
+			if ( isset( $error_data['headers'] ) && ! headers_sent() ) {
 				foreach ( $error_data['headers'] as $header => $value ) {
 					header( $header . ': ' . $value );
 				}
 			}
-			return $rate_check;
+			return $this->olp_convert_error( $rate_check );
 		}
 
-		// Require OAuth client authentication for introspection (RFC 7662)
 		$auth_result = $this->authenticate_oauth_client( $req );
 		if ( is_wp_error( $auth_result ) ) {
-			return $auth_result;
+			return $this->olp_convert_error( $auth_result );
 		}
 
 		$token = $req->get_param( 'token' );
 		if ( ! $token ) {
-			return new \WP_Error( 'invalid_request', 'Missing token parameter', array( 'status' => 400 ) );
+			return $this->olp_error( 'invalid_request', 'Missing token parameter', 400 );
+		}
+
+		$resource = esc_url_raw( (string) $req->get_param( 'resource' ) );
+		if ( '' === $resource ) {
+			return $this->olp_error( 'invalid_request', 'Missing resource parameter', 400 );
 		}
 
 		$payload = $this->jwt_decode_token( $token );
-		if ( is_wp_error( $payload ) ) {
+		if ( is_wp_error( $payload ) || ! $this->verify_license_token_claims( $payload ) ) {
 			$this->add_cors_headers();
 			return rest_ensure_response( array( 'active' => false ) );
 		}
 
-		// Check type, issuer, audience, expiry and revocation
-		if ( ! $this->verify_license_token_claims( $payload ) ) {
+		$license = $this->license_handler->get_license( intval( $payload['lic'] ?? 0 ) );
+		if ( ! $license || ! $license['active'] ) {
 			$this->add_cors_headers();
 			return rest_ensure_response( array( 'active' => false ) );
 		}
 
-		// Token is active, return full introspection data
+		$permitted = $this->url_matches_pattern( $resource, $license['content_url'] )
+			&& ( empty( $payload['pattern'] ) || $this->url_matches_pattern( $resource, $payload['pattern'] ) );
+
+		$license_xml = $this->license_handler->generate_rsl_xml(
+			$license,
+			array(
+				'standalone' => false,
+				'root'       => false,
+			)
+		);
+		if ( preg_match( '/<license>.*<\/license>/s', $license_xml, $matches ) ) {
+			$license_xml = $matches[0];
+		}
+
 		$response = array(
 			'active'     => true,
-			'client_id'  => $payload['sub'] ?? 'anonymous',
-			'username'   => $payload['sub'] ?? null,
-			'exp'        => $payload['exp'] ?? null,
-			'iat'        => $payload['iat'] ?? null,
-			'nbf'        => $payload['nbf'] ?? null,
-			'aud'        => $payload['aud'] ?? null,
-			'iss'        => $payload['iss'] ?? null,
-			'jti'        => $payload['jti'] ?? null,
-			'license_id' => $payload['lic'] ?? null,
-			'scope'      => $payload['scope'] ?? null,
+			'token_type' => 'License',
+			'license'    => $license_xml,
+			'resource'   => $resource,
+			'permitted'  => (bool) $permitted,
 		);
+
+		if ( ! $permitted ) {
+			$response['reason'] = 'resource_not_covered';
+		}
+
+		// RFC 7662 compatibility fields retained alongside the RSL fields.
+		$response['client_id']  = $payload['sub'] ?? 'anonymous';
+		$response['username']   = $payload['sub'] ?? null;
+		$response['exp']        = $payload['exp'] ?? null;
+		$response['iat']        = $payload['iat'] ?? null;
+		$response['nbf']        = $payload['nbf'] ?? null;
+		$response['aud']        = $payload['aud'] ?? null;
+		$response['iss']        = $payload['iss'] ?? null;
+		$response['jti']        = $payload['jti'] ?? null;
+		$response['license_id'] = $payload['lic'] ?? null;
+		$response['scope']      = $payload['scope'] ?? null;
 
 		$this->add_cors_headers();
 		$this->rate_limiter->add_rate_limit_headers( 'introspect', $auth_result['client_id'] );
@@ -639,8 +944,8 @@ class RSL_Server {
 	}
 
 	public function olp_get_key( \WP_REST_Request $req ) {
-		// Optional; return 501 for now
-		return new \WP_Error( 'not_implemented', 'Key delivery not implemented', array( 'status' => 501 ) );
+		// EMS key delivery is not implemented; use an external license server.
+		return $this->olp_error( 'server_error', 'Key delivery is not implemented by the built-in server', 501 );
 	}
 
 	private function format_license_for_api( $license_data ) {
@@ -664,7 +969,7 @@ class RSL_Server {
 				'user'  => $license_data['prohibits_user'],
 				'geo'   => $license_data['prohibits_geo'],
 			),
-			'xml_url'      => home_url( 'rsl-license/' . $license_data['id'] . '/' ),
+			'xml_url'      => self::get_license_url( $license_data['id'] ),
 			'updated_at'   => $license_data['updated_at'],
 		);
 	}
@@ -766,12 +1071,17 @@ class RSL_Server {
 			return array();
 		}
 
-		// Require auth if a license with server_url matches the current request
+		if ( ! apply_filters( 'rsl_enable_builtin_cap', true ) ) {
+			return array();
+		}
+
+		// Every advertised server (external or the built-in OLP endpoint) gates
+		// matching content. RSL 1.0 requires a token for free licenses too.
 		$current_url = home_url( $request_uri );
 		$licenses    = $this->license_handler->get_licenses( array( 'active' => 1 ) );
 		$gated       = array();
 		foreach ( $licenses as $license ) {
-			if ( ! empty( $license['server_url'] ) && $this->url_matches_pattern( $current_url, $license['content_url'] ) ) {
+			if ( $this->url_matches_pattern( $current_url, $license['content_url'] ) ) {
 				$gated[] = $license;
 			}
 		}
@@ -794,7 +1104,7 @@ class RSL_Server {
 	}
 
 	private function is_license_auth( $auth_header ) {
-		return strpos( $auth_header, 'License ' ) === 0;
+		return 0 === strncasecmp( trim( (string) $auth_header ), 'License ', 8 );
 	}
 
 	private function extract_license_token( $auth_header ) {
@@ -1047,10 +1357,10 @@ class RSL_Server {
 
 		return array(
 			'access_token' => $token,
-			'token_type'   => 'Bearer',
+			'token_type'   => 'License',
 			'expires_in'   => $ttl,
 			'expires_at'   => gmdate( 'c', $payload['exp'] ),
-			'license_url'  => home_url( 'rsl-license/' . $license['id'] . '/' ),
+			'license_url'  => self::get_license_url( $license['id'] ),
 		);
 	}
 
@@ -1221,6 +1531,41 @@ class RSL_Server {
 	}
 
 	/**
+	 * Attach the RSL session to the cart item when the license product is added
+	 * from a `/token` checkout URL.
+	 *
+	 * @param array $cart_item_data Cart item data.
+	 * @param int   $product_id     Product being added.
+	 * @return array
+	 */
+	public function capture_session_checkout( $cart_item_data, $product_id ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- opaque server-issued session id, not a state-changing action
+		if ( empty( $_GET['rsl_session_id'] ) ) {
+			return $cart_item_data;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$session_id = sanitize_text_field( wp_unslash( $_GET['rsl_session_id'] ) );
+		$session    = $this->session_manager->get_session( $session_id );
+		if ( ! is_array( $session ) || empty( $session['license_id'] ) ) {
+			return $cart_item_data;
+		}
+
+		$product_license = (int) get_post_meta( $product_id, '_rsl_license_id', true );
+		if ( $product_license && $product_license !== (int) $session['license_id'] ) {
+			return $cart_item_data;
+		}
+
+		$cart_item_data['rsl_session_id'] = $session_id;
+		$cart_item_data['rsl_license_id'] = (int) $session['license_id'];
+		if ( ! empty( $session['client'] ) ) {
+			$cart_item_data['rsl_client_id'] = $session['client'];
+		}
+
+		return $cart_item_data;
+	}
+
+	/**
 	 * Persist the RSL client on the order line item and order when checkout creates the order.
 	 *
 	 * @param WC_Order_Item_Product $item          Order line item.
@@ -1229,14 +1574,25 @@ class RSL_Server {
 	 * @param WC_Order|null         $order         Order being created.
 	 */
 	public function persist_checkout_client( $item, $cart_item_key, $values, $order = null ) {
-		if ( empty( $values['rsl_client_id'] ) ) {
-			return;
+		if ( ! empty( $values['rsl_client_id'] ) ) {
+			$item->add_meta_data( '_rsl_client_id', $values['rsl_client_id'], true );
+			if ( $order ) {
+				$order->update_meta_data( '_rsl_client_id', $values['rsl_client_id'] );
+			}
 		}
 
-		$item->add_meta_data( '_rsl_client_id', $values['rsl_client_id'], true );
-		$item->add_meta_data( '_rsl_license_id', intval( $values['rsl_license_id'] ), true );
-		if ( $order ) {
-			$order->update_meta_data( '_rsl_client_id', $values['rsl_client_id'] );
+		if ( ! empty( $values['rsl_license_id'] ) ) {
+			$item->add_meta_data( '_rsl_license_id', intval( $values['rsl_license_id'] ), true );
+			if ( $order ) {
+				$order->update_meta_data( '_rsl_license_id', intval( $values['rsl_license_id'] ) );
+			}
+		}
+
+		if ( ! empty( $values['rsl_session_id'] ) ) {
+			$item->add_meta_data( '_rsl_session_id', sanitize_text_field( $values['rsl_session_id'] ), true );
+			if ( $order ) {
+				$order->update_meta_data( '_rsl_session_id', sanitize_text_field( $values['rsl_session_id'] ) );
+			}
 		}
 	}
 
@@ -1337,6 +1693,24 @@ class RSL_Server {
 	}
 
 
+	/**
+	 * Public license document URL for the current request, when one matches.
+	 *
+	 * @return string
+	 */
+	private function get_matching_license_url() {
+		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH ) : '';
+		$current     = home_url( $request_uri );
+
+		foreach ( $this->license_handler->get_licenses( array( 'active' => 1 ) ) as $license ) {
+			if ( $this->url_matches_pattern( $current, $license['content_url'] ) ) {
+				return self::get_license_url( $license['id'] );
+			}
+		}
+
+		return '';
+	}
+
 	private function send_license_required_response() {
 		status_header( 401 );
 
@@ -1366,6 +1740,11 @@ class RSL_Server {
 			}
 		}
 
+		$license_url = $this->get_matching_license_url();
+		if ( $license_url ) {
+			header( 'Link: <' . esc_url_raw( $license_url ) . '>; rel="license"; type="application/rsl+xml"' );
+		}
+
 		header( 'WWW-Authenticate: License error="invalid_request", error_description="Access to this resource requires a valid license", authorization_uri="' . esc_url_raw( $authorization_uri ) . '"' );
 		header( 'Content-Type: text/plain' );
 		echo 'License required. Obtain a token at ' . esc_url( $authorization_uri );
@@ -1373,8 +1752,14 @@ class RSL_Server {
 
 	private function send_invalid_license_response() {
 		status_header( 401 );
+
+		$license_url = $this->get_matching_license_url();
+		if ( $license_url ) {
+			header( 'Link: <' . esc_url_raw( $license_url ) . '>; rel="license"; type="application/rsl+xml"' );
+		}
+
 		header(
-			'WWW-Authenticate: License error="invalid_license", ' .
+			'WWW-Authenticate: License error="invalid_token", ' .
 				'error_description="The provided license token is invalid or expired", ' .
 				'authorization_uri="' . home_url( '.well-known/rsl/' ) . '"'
 		);
@@ -1384,6 +1769,10 @@ class RSL_Server {
 	}
 
 	private function add_cors_headers() {
+		if ( headers_sent() ) {
+			return;
+		}
+
 		// Restrict CORS to trusted origins for security
 		$allowed_origins = apply_filters(
 			'rsl_cors_allowed_origins',
@@ -1438,7 +1827,7 @@ class RSL_Server {
 		$rate_check = $this->rate_limiter->check_rate_limit( 'session' );
 		if ( is_wp_error( $rate_check ) ) {
 			$error_data = $rate_check->get_error_data();
-			if ( isset( $error_data['headers'] ) ) {
+			if ( isset( $error_data['headers'] ) && ! headers_sent() ) {
 				foreach ( $error_data['headers'] as $header => $value ) {
 					header( $header . ': ' . $value );
 				}
@@ -1534,8 +1923,25 @@ class RSL_Server {
 			return;
 		}
 
-		$session_id = $order->get_meta( 'rsl_session_id' );
-		$license_id = $order->get_meta( 'rsl_license_id' );
+		$session_id = $order->get_meta( '_rsl_session_id' );
+		if ( ! $session_id ) {
+			$session_id = $order->get_meta( 'rsl_session_id' );
+		}
+
+		$license_id = $order->get_meta( '_rsl_license_id' );
+		if ( ! $license_id ) {
+			$license_id = $order->get_meta( 'rsl_license_id' );
+		}
+
+		if ( ! $license_id ) {
+			foreach ( $order->get_items() as $item ) {
+				$item_license = $item->get_meta( '_rsl_license_id' );
+				if ( $item_license ) {
+					$license_id = $item_license;
+					break;
+				}
+			}
+		}
 
 		if ( ! $session_id || ! $license_id ) {
 			return;

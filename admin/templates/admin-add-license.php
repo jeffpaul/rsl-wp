@@ -127,7 +127,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 							<?php esc_html_e( 'Content is encrypted', 'rsl-wp' ); ?>
 						</label>
 						<p class="description">
-							<?php esc_html_e( 'Check if the licensed content requires decryption keys from the license server.', 'rsl-wp' ); ?>
+							<?php esc_html_e( 'Only enable when the content is encrypted and served by an external license server that implements the RSL Encrypted Media Standard (EMS). The built-in server does not deliver decryption keys.', 'rsl-wp' ); ?>
 						</p>
 					</td>
 				</tr>
@@ -145,7 +145,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 					<td>
 						<select id="permits_usage" name="permits_usage" multiple class="rsl-multiselect">
 							<?php
-							$selected_usage = explode( ',', $license_data['permits_usage'] ?? '' );
+							$selected_usage = RSL_License::split_token_list( $license_data['permits_usage'] ?? '' );
 							foreach ( $license_handler->get_usage_options() as $value => $label ) :
 								?>
 								<option value="<?php echo esc_attr( $value ); ?>" 
@@ -167,7 +167,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 					<td>
 						<select id="permits_user" name="permits_user" multiple class="rsl-multiselect">
 							<?php
-							$selected_user = explode( ',', $license_data['permits_user'] ?? '' );
+							$selected_user = RSL_License::split_token_list( $license_data['permits_user'] ?? '' );
 							foreach ( $license_handler->get_user_options() as $value => $label ) :
 								?>
 								<option value="<?php echo esc_attr( $value ); ?>" 
@@ -209,7 +209,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 					<td>
 						<select id="prohibits_usage" name="prohibits_usage" multiple class="rsl-multiselect">
 							<?php
-							$selected_prohibited = explode( ',', $license_data['prohibits_usage'] ?? '' );
+							$selected_prohibited = RSL_License::split_token_list( $license_data['prohibits_usage'] ?? '' );
 							foreach ( $license_handler->get_usage_options() as $value => $label ) :
 								?>
 								<option value="<?php echo esc_attr( $value ); ?>" 
@@ -231,7 +231,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 					<td>
 						<select id="prohibits_user" name="prohibits_user" multiple class="rsl-multiselect">
 							<?php
-							$selected_prohibited_user = explode( ',', $license_data['prohibits_user'] ?? '' );
+							$selected_prohibited_user = RSL_License::split_token_list( $license_data['prohibits_user'] ?? '' );
 							foreach ( $license_handler->get_user_options() as $value => $label ) :
 								?>
 								<option value="<?php echo esc_attr( $value ); ?>" 
@@ -339,6 +339,32 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 						</p>
 					</td>
 				</tr>
+
+				<tr>
+					<th scope="row">
+						<label for="accepts_type"><?php esc_html_e( 'Payment Method Media Type', 'rsl-wp' ); ?></label>
+					</th>
+					<td>
+						<input type="text" id="accepts_type" name="accepts_type" class="regular-text"
+								value="<?php echo esc_attr( $license_data['accepts_type'] ?? '' ); ?>"
+								placeholder="application/x402+json">
+						<p class="description">
+							<?php esc_html_e( 'Optional media type for a payment protocol accepted by this license.', 'rsl-wp' ); ?>
+						</p>
+					</td>
+				</tr>
+
+				<tr>
+					<th scope="row">
+						<label for="accepts_body"><?php esc_html_e( 'Payment Method Metadata', 'rsl-wp' ); ?></label>
+					</th>
+					<td>
+						<textarea id="accepts_body" name="accepts_body" class="large-text code" rows="5"><?php echo esc_textarea( $license_data['accepts_body'] ?? '' ); ?></textarea>
+						<p class="description">
+							<?php esc_html_e( 'Optional protocol-specific JSON or text. It is emitted inside CDATA.', 'rsl-wp' ); ?>
+						</p>
+					</td>
+				</tr>
 			</tbody>
 		</table>
 		
@@ -353,7 +379,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 					<td>
 						<select id="warranty" name="warranty" multiple class="rsl-multiselect">
 							<?php
-							$selected_warranty = explode( ',', $license_data['warranty'] ?? '' );
+							$selected_warranty = RSL_License::split_token_list( $license_data['warranty'] ?? '' );
 							foreach ( $license_handler->get_warranty_options() as $value => $label ) :
 								?>
 								<option value="<?php echo esc_attr( $value ); ?>" 
@@ -375,7 +401,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 					<td>
 						<select id="disclaimer" name="disclaimer" multiple class="rsl-multiselect">
 							<?php
-							$selected_disclaimer = explode( ',', $license_data['disclaimer'] ?? '' );
+							$selected_disclaimer = RSL_License::split_token_list( $license_data['disclaimer'] ?? '' );
 							foreach ( $license_handler->get_disclaimer_options() as $value => $label ) :
 								?>
 								<option value="<?php echo esc_attr( $value ); ?>" 
@@ -386,6 +412,103 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 						</select>
 						<p class="description">
 							<?php esc_html_e( 'Select disclaimers for this license.', 'rsl-wp' ); ?>
+						</p>
+					</td>
+				</tr>
+
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Attestation', 'rsl-wp' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="legal_attestation" value="1"
+									<?php checked( $license_data['legal_attestation'] ?? 0, 1 ); ?>>
+							<?php esc_html_e( 'I own, administer, or am authorized to assert these rights', 'rsl-wp' ); ?>
+						</label>
+					</td>
+				</tr>
+
+				<tr>
+					<th scope="row">
+						<label for="legal_contact"><?php esc_html_e( 'Rights Contact', 'rsl-wp' ); ?></label>
+					</th>
+					<td>
+						<input type="text" id="legal_contact" name="legal_contact" class="regular-text"
+								value="<?php echo esc_attr( $license_data['legal_contact'] ?? '' ); ?>"
+								placeholder="https://example.com/contact or mailto:legal@example.com">
+						<p class="description">
+							<?php esc_html_e( 'URL or email where rights holders can be reached about this license.', 'rsl-wp' ); ?>
+						</p>
+					</td>
+				</tr>
+
+				<tr>
+					<th scope="row">
+						<label for="legal_proof"><?php esc_html_e( 'Proof URIs', 'rsl-wp' ); ?></label>
+					</th>
+					<td>
+						<textarea id="legal_proof" name="legal_proof" class="large-text code" rows="3"><?php echo esc_textarea( $license_data['legal_proof'] ?? '' ); ?></textarea>
+						<p class="description">
+							<?php esc_html_e( 'Space-separated absolute URIs with cryptographically verifiable evidence of authority.', 'rsl-wp' ); ?>
+						</p>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+
+		<h2><?php esc_html_e( 'Reporting', 'rsl-wp' ); ?></h2>
+
+		<table class="form-table">
+			<tbody>
+				<tr>
+					<th scope="row">
+						<label for="reporting_type"><?php esc_html_e( 'Reporting Category', 'rsl-wp' ); ?></label>
+					</th>
+					<td>
+						<select id="reporting_type" name="reporting_type">
+							<option value=""><?php esc_html_e( 'No reporting requirement', 'rsl-wp' ); ?></option>
+							<option value="telemetry" <?php selected( $license_data['reporting_type'] ?? '', 'telemetry' ); ?>><?php esc_html_e( 'Telemetry', 'rsl-wp' ); ?></option>
+							<option value="provenance" <?php selected( $license_data['reporting_type'] ?? '', 'provenance' ); ?>><?php esc_html_e( 'Provenance', 'rsl-wp' ); ?></option>
+							<option value="audit" <?php selected( $license_data['reporting_type'] ?? '', 'audit' ); ?>><?php esc_html_e( 'Audit', 'rsl-wp' ); ?></option>
+						</select>
+						<p class="description">
+							<?php esc_html_e( 'Reporting is emitted only when both a category and profile are set.', 'rsl-wp' ); ?>
+						</p>
+					</td>
+				</tr>
+
+				<tr>
+					<th scope="row">
+						<label for="reporting_profile"><?php esc_html_e( 'Reporting Profile', 'rsl-wp' ); ?></label>
+					</th>
+					<td>
+						<input type="text" id="reporting_profile" name="reporting_profile" class="regular-text"
+								value="<?php echo esc_attr( $license_data['reporting_profile'] ?? '' ); ?>"
+								placeholder="https://example.com/profiles/reporting">
+						<p class="description">
+							<?php esc_html_e( 'Absolute URI identifying the reporting profile.', 'rsl-wp' ); ?>
+						</p>
+					</td>
+				</tr>
+
+				<tr>
+					<th scope="row">
+						<label for="reporting_endpoint"><?php esc_html_e( 'Reporting Endpoint', 'rsl-wp' ); ?></label>
+					</th>
+					<td>
+						<input type="text" id="reporting_endpoint" name="reporting_endpoint" class="regular-text"
+								value="<?php echo esc_attr( $license_data['reporting_endpoint'] ?? '' ); ?>"
+								placeholder="https://example.com/reports">
+					</td>
+				</tr>
+
+				<tr>
+					<th scope="row">
+						<label for="reporting_body"><?php esc_html_e( 'Reporting Configuration', 'rsl-wp' ); ?></label>
+					</th>
+					<td>
+						<textarea id="reporting_body" name="reporting_body" class="large-text code" rows="5"><?php echo esc_textarea( $license_data['reporting_body'] ?? '' ); ?></textarea>
+						<p class="description">
+							<?php esc_html_e( 'Optional profile-specific JSON or text. It is emitted inside CDATA.', 'rsl-wp' ); ?>
 						</p>
 					</td>
 				</tr>
@@ -405,6 +528,49 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 								value="<?php echo esc_attr( $license_data['schema_url'] ?? '' ); ?>">
 						<p class="description">
 							<?php esc_html_e( 'URL to Schema.org CreativeWork metadata for this content.', 'rsl-wp' ); ?>
+						</p>
+					</td>
+				</tr>
+
+				<tr>
+					<th scope="row">
+						<label for="schema_inline"><?php esc_html_e( 'Inline Schema.org JSON-LD', 'rsl-wp' ); ?></label>
+					</th>
+					<td>
+						<textarea id="schema_inline" name="schema_inline" class="large-text code" rows="6"><?php echo esc_textarea( $license_data['schema_inline'] ?? '' ); ?></textarea>
+						<p class="description">
+							<?php esc_html_e( 'Optional inline JSON-LD. Takes precedence over the Schema.org URL and is emitted inside CDATA.', 'rsl-wp' ); ?>
+						</p>
+					</td>
+				</tr>
+
+				<tr>
+					<th scope="row">
+						<label for="alternate_url"><?php esc_html_e( 'Alternate Representation', 'rsl-wp' ); ?></label>
+					</th>
+					<td>
+						<input type="text" id="alternate_url" name="alternate_url" class="regular-text"
+								value="<?php echo esc_attr( $license_data['alternate_url'] ?? '' ); ?>"
+								placeholder="/exports/site.json">
+						<input type="text" name="alternate_type" class="regular-text"
+								value="<?php echo esc_attr( $license_data['alternate_type'] ?? '' ); ?>"
+								placeholder="application/json">
+						<p class="description">
+							<?php esc_html_e( 'Optional alternate URL and its media type, such as a JSON or WARC representation.', 'rsl-wp' ); ?>
+						</p>
+					</td>
+				</tr>
+
+				<tr>
+					<th scope="row">
+						<label for="max_age"><?php esc_html_e( 'Max Age', 'rsl-wp' ); ?></label>
+					</th>
+					<td>
+						<input type="number" id="max_age" name="max_age" min="1" max="3650" class="small-text"
+								value="<?php echo esc_attr( $license_data['max_age'] ?? 30 ); ?>">
+						<?php esc_html_e( 'days', 'rsl-wp' ); ?>
+						<p class="description">
+							<?php esc_html_e( 'How long clients may treat this RSL document as authoritative before revalidating.', 'rsl-wp' ); ?>
 						</p>
 					</td>
 				</tr>

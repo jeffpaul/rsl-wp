@@ -230,7 +230,7 @@ jQuery(document).ready(function ($) {
             );
             $(this).after(hiddenField);
           }
-          hiddenField.val(values.join(","));
+          hiddenField.val(values.join(" "));
         }
       });
     },
@@ -258,12 +258,11 @@ jQuery(document).ready(function ($) {
       // Handle server option - set server_url based on radio selection
       var serverOption = $('input[name="server_option"]:checked').val();
       if (serverOption === "builtin") {
-        // Remove any existing server_url parameter to prevent duplicates
+        // The built-in server URL is generated at render time; never persist it.
         formData = formData.replace(/&?server_url=[^&]*/g, "");
-        formData += "&server_url=" + encodeURIComponent(rsl_ajax.rest_url);
       }
 
-      // Handle multiselect fields (convert to comma-separated values)
+      // Handle multiselect fields (RSL tokens are space-separated)
       $(".rsl-multiselect").each(function () {
         var fieldName = $(this).attr("name");
         var values = $(this).val();
@@ -275,10 +274,10 @@ jQuery(document).ready(function ($) {
         );
         formData = formData.replace(regex, "");
 
-        // Add the multiselect field with proper comma-separated values
+        // Add the multiselect field with space-separated RSL tokens
         if (values && values.length > 0) {
           formData +=
-            "&" + fieldName + "=" + encodeURIComponent(values.join(","));
+            "&" + fieldName + "=" + encodeURIComponent(values.join(" "));
         } else {
           formData += "&" + fieldName + "=";
         }

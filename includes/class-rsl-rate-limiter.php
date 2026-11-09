@@ -90,9 +90,11 @@ class RSL_Rate_Limiter {
 		$remaining     = max( 0, $limit - $current_count );
 		$window        = $this->get_time_window();
 
-		header( 'X-RateLimit-Limit: ' . $limit );
-		header( 'X-RateLimit-Remaining: ' . $remaining );
-		header( 'X-RateLimit-Reset: ' . ( time() + $window ) );
+		if ( ! headers_sent() ) {
+			header( 'X-RateLimit-Limit: ' . $limit );
+			header( 'X-RateLimit-Remaining: ' . $remaining );
+			header( 'X-RateLimit-Reset: ' . ( time() + $window ) );
+		}
 	}
 
 	/**

@@ -30,8 +30,9 @@ class RSL_WooCommerce_Processor implements RSL_Payment_Processor_Interface {
 			'purchase',     // One-time payment
 			'crawl',        // Pay-per-crawl (one-time payment)
 			'training',     // AI training fee (one-time payment)
-			'inference',    // AI inference fee (one-time payment)
-			'attribution',   // Paid attribution (one-time payment)
+			'use',          // Per-use / inference-style fee (one-time payment)
+			'contribution', // Voluntary contribution (one-time payment)
+			'attribution',  // Paid attribution (one-time payment)
 		);
 
 		// Add subscription-based payment types if WC Subscriptions is active

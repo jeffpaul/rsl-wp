@@ -420,7 +420,6 @@ class TestRSLOAuthClient extends TestCase {
 		// Use reflection to test private method
 		$reflection = new \ReflectionClass( $this->oauth_client );
 		$method     = $reflection->getMethod( 'generate_client_id' );
-		$method->setAccessible( true );
 
 		$client_id1 = $method->invoke( $this->oauth_client );
 		$client_id2 = $method->invoke( $this->oauth_client );
@@ -440,7 +439,6 @@ class TestRSLOAuthClient extends TestCase {
 		// Use reflection to test private method
 		$reflection = new \ReflectionClass( $this->oauth_client );
 		$method     = $reflection->getMethod( 'generate_client_secret' );
-		$method->setAccessible( true );
 
 		$secret1 = $method->invoke( $this->oauth_client );
 		$secret2 = $method->invoke( $this->oauth_client );

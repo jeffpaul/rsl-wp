@@ -124,6 +124,51 @@ add_filter('rsl_token_ttl', function($ttl) {
 });
 ```
 
+#### `rsl_license_url`
+Filter the public URL for a single RSL license document (default: `rsl-license/{id}/` with pretty permalinks, or `?rsl_license_id={id}`):
+
+```php
+add_filter('rsl_license_url', function($url, $license_id) {
+    return home_url('/licenses/' . $license_id . '.xml');
+}, 10, 2);
+```
+
+#### `rsl_feed_url`
+Filter the public URL for the RSL license catalogue feed:
+
+```php
+add_filter('rsl_feed_url', function($url) {
+    return home_url('/rsl-feed.xml');
+});
+```
+
+#### `rsl_require_client_auth`
+Require OAuth client authentication on every `/token` request (default `true`, per RSL 1.0). Return `false` only for backwards compatibility with integrations that relied on unauthenticated token requests:
+
+```php
+add_filter('rsl_require_client_auth', function($required, $license, $request) {
+    return $required;
+}, 10, 3);
+```
+
+#### `rsl_builtin_server_url`
+URL advertised in the `server` attribute for licenses served by the built-in OLP server (default: `rest_url('rsl-olp/v1')`). Return an empty string to advertise no server:
+
+```php
+add_filter('rsl_builtin_server_url', function($url, $license_data) {
+    return 'https://licenses.example.com/olp';
+}, 10, 2);
+```
+
+#### `rsl_enable_builtin_cap`
+Whether the built-in server issues CAP license challenges for licenses it serves (default `true`). When disabled, requests are handled without a CAP gate:
+
+```php
+add_filter('rsl_enable_builtin_cap', function($enabled) {
+    return false;
+});
+```
+
 #### `rsl_verify_order_client`
 Decide whether a WooCommerce order or subscription can be redeemed for a token by the authenticated OAuth client. By default only the client recorded at the token endpoint's checkout can redeem it, so orders created any other way are rejected:
 
@@ -478,6 +523,9 @@ RSL server discovery endpoint.
 }
 ```
 
+### `GET /rsl.xml`
+Site-wide RSL document containing every active license. Licenses that share a `content_url` are grouped into one `<content>` with multiple `<license>` children, so tiered terms such as free search indexing and paid AI training appear together.
+
 ### `GET /rsl-license/{id}/`
 Individual license XML output.
 
@@ -486,18 +534,19 @@ The response carries a strong `ETag` whose value is the quoted SHA-256 hex diges
 **Response:**
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<rsl xmlns="https://rslstandard.org/rsl">
-  <content url="/">
+<rsl xmlns="https://rslstandard.org/rsl" max-age="30">
+  <content url="/" server="https://example.com/wp-json/rsl-olp/v1">
     <license>
-      <permits type="usage">train-ai</permits>
+      <permits type="usage">ai-train</permits>
       <payment type="purchase">
         <amount currency="USD">499.00</amount>
       </payment>
-      <server url="https://example.com/wp-json/rsl-olp/v1"/>
     </license>
   </content>
 </rsl>
 ```
+
+License rows also support `accepts_type`/`accepts_body`, `reporting_type`/`reporting_profile`/`reporting_endpoint`/`reporting_body`, `legal_attestation`/`legal_contact`/`legal_proof`, `alternate_type`/`alternate_url`, and `schema_inline` for RSL 1.0 payment, reporting, legal, alternate, and inline JSON-LD metadata.
 
 ### `GET /feed/rsl-licenses/`
 RSS feed of all licenses.

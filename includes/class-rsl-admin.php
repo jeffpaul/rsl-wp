@@ -163,13 +163,6 @@ class RSL_Admin {
 				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
 			)
 		);
-		register_setting(
-			'rsl_settings',
-			'rsl_default_namespace',
-			array(
-				'sanitize_callback' => 'esc_url_raw',
-			)
-		);
 	}
 
 	public function sanitize_checkbox( $value ) {
@@ -395,6 +388,19 @@ class RSL_Admin {
 			return;
 		}
 
+		$encrypted = isset( $_POST['encrypted'] ) ? 1 : 0;
+		if ( $encrypted && empty( $server_url ) ) {
+			wp_send_json_error(
+				array(
+					'message' => __(
+						'Content encryption requires an external license server that implements the Encrypted Media Standard (EMS).',
+						'rsl-wp'
+					),
+				)
+			);
+			return;
+		}
+
 		// Validate amount
 		$amount = isset( $_POST['amount'] ) ? floatval( $_POST['amount'] ) : 0;
 		if ( $amount < 0 || $amount > 999999.99 ) {
@@ -506,16 +512,7 @@ class RSL_Admin {
 		}
 
 		// Validate payment type
-		$allowed_payment_types = array(
-			'free',
-			'purchase',
-			'subscription',
-			'training',
-			'crawl',
-			'inference',
-			'attribution',
-			'royalty',
-		);
+		$allowed_payment_types = RSL_License::PAYMENT_TYPES;
 		$payment_type          = isset( $_POST['payment_type'] )
 			? sanitize_text_field( wp_unslash( $_POST['payment_type'] ) )
 			: 'free';
@@ -530,8 +527,8 @@ class RSL_Admin {
 				: '',
 			'content_url'      => $content_url,
 			'server_url'       => $server_url,
-			'encrypted'        => isset( $_POST['encrypted'] ) ? 1 : 0,
-			'lastmod'          => current_time( 'mysql' ),
+			'encrypted'        => $encrypted,
+			'lastmod'          => current_time( 'mysql', true ),
 			'permits_usage'    => isset( $_POST['permits_usage'] )
 				? sanitize_text_field( wp_unslash( $_POST['permits_usage'] ) )
 				: '',
@@ -578,10 +575,45 @@ class RSL_Admin {
 			'contact_url'      => isset( $_POST['contact_url'] )
 				? esc_url_raw( wp_unslash( $_POST['contact_url'] ) )
 				: '',
-			'terms_url'        => isset( $_POST['terms_url'] )
+			'terms_url'          => isset( $_POST['terms_url'] )
 				? esc_url_raw( wp_unslash( $_POST['terms_url'] ) )
 				: '',
-			'active'           => isset( $_POST['active'] ) ? 1 : 0,
+			'max_age'            => isset( $_POST['max_age'] ) ? intval( $_POST['max_age'] ) : 30,
+			'accepts_type'       => isset( $_POST['accepts_type'] )
+				? sanitize_text_field( wp_unslash( $_POST['accepts_type'] ) )
+				: '',
+			'accepts_body'       => isset( $_POST['accepts_body'] )
+				? sanitize_textarea_field( wp_unslash( $_POST['accepts_body'] ) )
+				: '',
+			'reporting_type'     => isset( $_POST['reporting_type'] )
+				? sanitize_text_field( wp_unslash( $_POST['reporting_type'] ) )
+				: '',
+			'reporting_profile'  => isset( $_POST['reporting_profile'] )
+				? sanitize_text_field( wp_unslash( $_POST['reporting_profile'] ) )
+				: '',
+			'reporting_endpoint' => isset( $_POST['reporting_endpoint'] )
+				? sanitize_text_field( wp_unslash( $_POST['reporting_endpoint'] ) )
+				: '',
+			'reporting_body'     => isset( $_POST['reporting_body'] )
+				? sanitize_textarea_field( wp_unslash( $_POST['reporting_body'] ) )
+				: '',
+			'legal_attestation'  => isset( $_POST['legal_attestation'] ) ? 1 : 0,
+			'legal_contact'      => isset( $_POST['legal_contact'] )
+				? sanitize_text_field( wp_unslash( $_POST['legal_contact'] ) )
+				: '',
+			'legal_proof'        => isset( $_POST['legal_proof'] )
+				? sanitize_textarea_field( wp_unslash( $_POST['legal_proof'] ) )
+				: '',
+			'alternate_type'     => isset( $_POST['alternate_type'] )
+				? sanitize_text_field( wp_unslash( $_POST['alternate_type'] ) )
+				: '',
+			'alternate_url'      => isset( $_POST['alternate_url'] )
+				? sanitize_text_field( wp_unslash( $_POST['alternate_url'] ) )
+				: '',
+			'schema_inline'      => isset( $_POST['schema_inline'] )
+				? sanitize_textarea_field( wp_unslash( $_POST['schema_inline'] ) )
+				: '',
+			'active'             => isset( $_POST['active'] ) ? 1 : 0,
 		);
 
 		if (

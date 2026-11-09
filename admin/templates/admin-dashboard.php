@@ -606,9 +606,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 									<a href="
 									<?php
 									echo esc_url(
-										admin_url(
-											'admin.php?page=rsl-add-license&edit=' .
-												$license['id'],
+										wp_nonce_url(
+											admin_url(
+												'admin.php?page=rsl-add-license&edit=' .
+													$license['id'],
+											),
+											'edit_license',
 										),
 									);
 									?>

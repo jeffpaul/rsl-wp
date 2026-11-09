@@ -11,7 +11,7 @@ class RSL_Abilities {
 
 	public function __construct() {
 		$this->license_handler = new RSL_License();
-		$this->server          = new RSL_Server();
+		$this->server          = RSL_Server::get_instance();
 
 		add_action( 'abilities_api_init', array( $this, 'register_abilities' ) );
 	}
@@ -48,7 +48,7 @@ class RSL_Abilities {
 						),
 						'payment_type'     => array(
 							'type'        => 'string',
-							'enum'        => array( 'free', 'purchase', 'subscription', 'training', 'crawl', 'inference', 'attribution' ),
+							'enum'        => RSL_License::PAYMENT_TYPES,
 							'default'     => 'free',
 							'description' => 'Type of payment or compensation required',
 						),
@@ -65,11 +65,11 @@ class RSL_Abilities {
 						),
 						'permits_usage'    => array(
 							'type'        => 'string',
-							'description' => 'Comma-separated usage types allowed (all, train-ai, search, etc.)',
+							'description' => 'Space-separated usage tokens (all, ai-all, ai-train, ai-input, ai-index, search)',
 						),
 						'prohibits_usage'  => array(
 							'type'        => 'string',
-							'description' => 'Comma-separated usage types prohibited',
+							'description' => 'Space-separated usage tokens prohibited',
 						),
 						'permits_user'     => array(
 							'type'        => 'string',
@@ -100,6 +100,62 @@ class RSL_Abilities {
 							'type'        => 'string',
 							'format'      => 'uri',
 							'description' => 'Optional RSL License Server URL for authentication',
+						),
+						'max_age'            => array(
+							'type'        => 'integer',
+							'minimum'     => 1,
+							'maximum'     => 3650,
+							'default'     => 30,
+							'description' => 'Days clients may treat the RSL document as authoritative',
+						),
+						'accepts_type'       => array(
+							'type'        => 'string',
+							'description' => 'Media type for an accepted payment protocol, such as application/x402+json',
+						),
+						'accepts_body'       => array(
+							'type'        => 'string',
+							'description' => 'Protocol-specific payment metadata emitted inside CDATA',
+						),
+						'reporting_type'     => array(
+							'type'        => 'string',
+							'enum'        => RSL_License::REPORTING_TYPES,
+							'description' => 'Reporting category: telemetry, provenance, or audit',
+						),
+						'reporting_profile'  => array(
+							'type'        => 'string',
+							'description' => 'Absolute URI identifying the reporting profile',
+						),
+						'reporting_endpoint' => array(
+							'type'        => 'string',
+							'description' => 'Optional endpoint that receives reports',
+						),
+						'reporting_body'     => array(
+							'type'        => 'string',
+							'description' => 'Profile-specific reporting configuration emitted inside CDATA',
+						),
+						'legal_attestation'  => array(
+							'type'        => 'boolean',
+							'description' => 'Whether the publisher attests they are authorized to assert these rights',
+						),
+						'legal_contact'      => array(
+							'type'        => 'string',
+							'description' => 'URL or email for rights-holder contact',
+						),
+						'legal_proof'        => array(
+							'type'        => 'string',
+							'description' => 'Space-separated absolute URIs proving authority',
+						),
+						'alternate_type'     => array(
+							'type'        => 'string',
+							'description' => 'Media type of an alternate representation',
+						),
+						'alternate_url'      => array(
+							'type'        => 'string',
+							'description' => 'URL or path of an alternate representation',
+						),
+						'schema_inline'      => array(
+							'type'        => 'string',
+							'description' => 'Inline Schema.org JSON-LD emitted inside CDATA',
 						),
 					),
 					'required'             => array( 'name', 'content_url' ),
@@ -153,7 +209,7 @@ class RSL_Abilities {
 						),
 						'payment_type'     => array(
 							'type'        => 'string',
-							'enum'        => array( 'free', 'purchase', 'subscription', 'training', 'crawl', 'inference', 'attribution' ),
+							'enum'        => RSL_License::PAYMENT_TYPES,
 							'description' => 'Updated payment type',
 						),
 						'amount'           => array(
@@ -177,11 +233,11 @@ class RSL_Abilities {
 						),
 						'permits_usage'    => array(
 							'type'        => 'string',
-							'description' => 'Comma-separated usage types allowed (all, train-ai, search, etc.)',
+							'description' => 'Space-separated usage tokens (all, ai-all, ai-train, ai-input, ai-index, search)',
 						),
 						'prohibits_usage'  => array(
 							'type'        => 'string',
-							'description' => 'Comma-separated usage types prohibited',
+							'description' => 'Space-separated usage tokens prohibited',
 						),
 						'permits_user'     => array(
 							'type'        => 'string',
@@ -212,6 +268,62 @@ class RSL_Abilities {
 							'type'        => 'string',
 							'format'      => 'uri',
 							'description' => 'Optional RSL License Server URL for authentication',
+						),
+						'max_age'            => array(
+							'type'        => 'integer',
+							'minimum'     => 1,
+							'maximum'     => 3650,
+							'default'     => 30,
+							'description' => 'Days clients may treat the RSL document as authoritative',
+						),
+						'accepts_type'       => array(
+							'type'        => 'string',
+							'description' => 'Media type for an accepted payment protocol, such as application/x402+json',
+						),
+						'accepts_body'       => array(
+							'type'        => 'string',
+							'description' => 'Protocol-specific payment metadata emitted inside CDATA',
+						),
+						'reporting_type'     => array(
+							'type'        => 'string',
+							'enum'        => RSL_License::REPORTING_TYPES,
+							'description' => 'Reporting category: telemetry, provenance, or audit',
+						),
+						'reporting_profile'  => array(
+							'type'        => 'string',
+							'description' => 'Absolute URI identifying the reporting profile',
+						),
+						'reporting_endpoint' => array(
+							'type'        => 'string',
+							'description' => 'Optional endpoint that receives reports',
+						),
+						'reporting_body'     => array(
+							'type'        => 'string',
+							'description' => 'Profile-specific reporting configuration emitted inside CDATA',
+						),
+						'legal_attestation'  => array(
+							'type'        => 'boolean',
+							'description' => 'Whether the publisher attests they are authorized to assert these rights',
+						),
+						'legal_contact'      => array(
+							'type'        => 'string',
+							'description' => 'URL or email for rights-holder contact',
+						),
+						'legal_proof'        => array(
+							'type'        => 'string',
+							'description' => 'Space-separated absolute URIs proving authority',
+						),
+						'alternate_type'     => array(
+							'type'        => 'string',
+							'description' => 'Media type of an alternate representation',
+						),
+						'alternate_url'      => array(
+							'type'        => 'string',
+							'description' => 'URL or path of an alternate representation',
+						),
+						'schema_inline'      => array(
+							'type'        => 'string',
+							'description' => 'Inline Schema.org JSON-LD emitted inside CDATA',
 						),
 					),
 					'required'             => array( 'license_id' ),
@@ -295,7 +407,7 @@ class RSL_Abilities {
 						),
 						'payment_type' => array(
 							'type'        => 'string',
-							'enum'        => array( 'free', 'purchase', 'subscription', 'training', 'crawl', 'inference', 'attribution' ),
+							'enum'        => RSL_License::PAYMENT_TYPES,
 							'description' => 'Filter by payment type',
 						),
 						'search'       => array(
@@ -463,7 +575,7 @@ class RSL_Abilities {
 						),
 						'usage_type'   => array(
 							'type'        => 'string',
-							'enum'        => array( 'all', 'train-ai', 'train-genai', 'ai-use', 'ai-summarize', 'search' ),
+							'enum'        => RSL_License::USAGE_TOKENS,
 							'description' => 'Intended usage of the content',
 						),
 						'user_type'    => array(
@@ -669,7 +781,7 @@ class RSL_Abilities {
 		return array(
 			'license_id' => $license_id,
 			'success'    => true,
-			'xml_url'    => home_url( "/?rsl_license={$license_id}" ),
+			'xml_url'    => RSL_Server::get_license_url( $license_id ),
 		);
 	}
 
@@ -853,7 +965,7 @@ class RSL_Abilities {
 		return array(
 			'xml'          => $xml,
 			'license_name' => $license['name'],
-			'xml_url'      => home_url( "/?rsl_license={$license['id']}" ),
+			'xml_url'      => RSL_Server::get_license_url( $license['id'] ),
 		);
 	}
 
