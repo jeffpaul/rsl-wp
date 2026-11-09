@@ -51,7 +51,8 @@ class RSL_Media {
 		$file_path = get_attached_file( $attachment_id );
 		$file_type = wp_check_filetype( $file_path );
 
-		// Process based on file type
+		// Process based on file type. Only JPEG supports direct XMP embedding
+		// here; other formats get a sidecar file and are labelled accordingly.
 		switch ( $file_type['type'] ) {
 			case 'image/jpeg':
 			case 'image/tiff':
@@ -67,6 +68,16 @@ class RSL_Media {
 			case 'application/epub+zip':
 				$this->embed_rsl_in_epub( $attachment_id, $file_path );
 				break;
+
+			case 'audio/mpeg':
+			case 'audio/mp3':
+			case 'audio/ogg':
+			case 'audio/wav':
+			case 'video/mp4':
+			case 'video/webm':
+			case 'video/quicktime':
+				$this->write_media_sidecar( $attachment_id, $file_path );
+				break;
 		}
 	}
 
@@ -77,86 +88,90 @@ class RSL_Media {
 			return;
 		}
 
-		// Generate XMP metadata with RSL information
 		$xmp_data = $this->generate_xmp_rsl( $license_data, $attachment_id );
+		$embedded = false;
+		$sidecar  = '';
 
-		// For JPEG images, we can embed XMP data
-		if ( function_exists( 'iptcembed' ) ) {
-			$this->embed_xmp_in_jpeg( $file_path, $xmp_data );
+		if ( 'image/jpeg' === wp_check_filetype( $file_path )['type'] && $this->embed_xmp_in_jpeg( $file_path, $xmp_data ) ) {
+			$embedded = true;
+		} else {
+			$sidecar = $this->write_sidecar_file( $file_path, $xmp_data, '.xmp' );
 		}
 
-		// Store RSL metadata in WordPress
-		update_post_meta( $attachment_id, '_rsl_embedded', 1 );
+		update_post_meta( $attachment_id, '_rsl_embedded', $embedded ? 1 : 0 );
+		update_post_meta( $attachment_id, '_rsl_sidecar', $sidecar );
 		update_post_meta( $attachment_id, '_rsl_xmp_data', $xmp_data );
 	}
 
 	private function embed_rsl_in_pdf( $attachment_id, $file_path ) {
-		$license_data = $this->get_media_license( $attachment_id );
+		$rsl_xml = $this->generate_media_rsl_xml( $attachment_id );
 
-		if ( ! $license_data ) {
+		if ( ! $rsl_xml ) {
 			return;
 		}
 
-		// For PDFs, we store the RSL metadata and can generate a companion RSL file
-		$rsl_xml = $this->license_handler->generate_rsl_xml( $license_data );
+		$sidecar = $this->write_sidecar_file( $file_path, $rsl_xml, '.rsl.xml' );
 
-		// Store metadata
-		update_post_meta( $attachment_id, '_rsl_embedded', 1 );
+		update_post_meta( $attachment_id, '_rsl_embedded', 0 );
+		update_post_meta( $attachment_id, '_rsl_sidecar', $sidecar );
 		update_post_meta( $attachment_id, '_rsl_xml_data', $rsl_xml );
-
-		// Create companion RSL file with security validation
-		$rsl_file_path = str_replace( '.pdf', '.rsl.xml', $file_path );
-		$this->safe_write_rsl_file( $rsl_file_path, $rsl_xml );
 	}
 
 	private function embed_rsl_in_epub( $attachment_id, $file_path ) {
-		$license_data = $this->get_media_license( $attachment_id );
+		$rsl_xml = $this->generate_media_rsl_xml( $attachment_id );
 
-		if ( ! $license_data ) {
+		if ( ! $rsl_xml ) {
 			return;
 		}
 
-		// For EPUB files, we would need to modify the OPF manifest
-		// This is more complex and would require ZIP manipulation
+		$sidecar = $this->write_sidecar_file( $file_path, $rsl_xml, '.rsl.xml' );
 
-		// For now, store metadata and create companion RSL file
-		$rsl_xml = $this->license_handler->generate_rsl_xml( $license_data );
-
-		update_post_meta( $attachment_id, '_rsl_embedded', 1 );
+		update_post_meta( $attachment_id, '_rsl_embedded', 0 );
+		update_post_meta( $attachment_id, '_rsl_sidecar', $sidecar );
 		update_post_meta( $attachment_id, '_rsl_xml_data', $rsl_xml );
+	}
 
-		$rsl_file_path = str_replace( '.epub', '.rsl.xml', $file_path );
-		$this->safe_write_rsl_file( $rsl_file_path, $rsl_xml );
+	private function write_media_sidecar( $attachment_id, $file_path ) {
+		$rsl_xml = $this->generate_media_rsl_xml( $attachment_id );
+
+		if ( ! $rsl_xml ) {
+			return;
+		}
+
+		$sidecar = $this->write_sidecar_file( $file_path, $rsl_xml, '.rsl.xml' );
+
+		update_post_meta( $attachment_id, '_rsl_embedded', 0 );
+		update_post_meta( $attachment_id, '_rsl_sidecar', $sidecar );
+		update_post_meta( $attachment_id, '_rsl_xml_data', $rsl_xml );
+	}
+
+	private function write_sidecar_file( $file_path, $content, $suffix ) {
+		$sidecar = $file_path . $suffix;
+		return $this->safe_write_rsl_file( $sidecar, $content ) ? $sidecar : '';
 	}
 
 	private function generate_xmp_rsl( $license_data, $attachment_id ) {
 		$file_url = wp_get_attachment_url( $attachment_id );
 
-		// Override content URL for this specific file
+		// A media fragment describes this exact file, not the post or site.
 		$license_data['content_url'] = $file_url;
 
-		$xmp  = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-		$xmp .= '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="RSL/1.0">' . "\n";
-		$xmp .= '  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"' . "\n";
-		$xmp .= '           xmlns:rsl="https://rslstandard.org/rsl">' . "\n";
-		$xmp .= '    <rdf:Description rdf:about="">' . "\n";
-
-		// Generate RSL XML without standalone declaration
 		$rsl_xml = $this->license_handler->generate_rsl_xml(
 			$license_data,
 			array(
 				'standalone' => false,
+				'root'       => false,
+				'prefix'     => 'rsl:',
 			)
 		);
 
-		// Indent RSL XML for XMP embedding
-		$rsl_lines = explode( "\n", $rsl_xml );
-		foreach ( $rsl_lines as $line ) {
-			if ( trim( $line ) ) {
-				$xmp .= '      ' . $line . "\n";
-			}
-		}
-
+		$xmp  = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+		$xmp .= '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="RSL/1.0">' . "\n";
+		$xmp .= '  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' . "\n";
+		$xmp .= '    <rdf:Description rdf:about="" xmlns:rsl="' . esc_attr( RSL_NAMESPACE ) . '">' . "\n";
+		$xmp .= '      <rsl:rsl rdf:parseType="Literal">' . "\n";
+		$xmp .= $this->indent_xml( $rsl_xml, 8 );
+		$xmp .= '      </rsl:rsl>' . "\n";
 		$xmp .= '    </rdf:Description>' . "\n";
 		$xmp .= '  </rdf:RDF>' . "\n";
 		$xmp .= '</x:xmpmeta>' . "\n";
@@ -164,29 +179,73 @@ class RSL_Media {
 		return $xmp;
 	}
 
+	private function indent_xml( $xml, $spaces ) {
+		$indent = str_repeat( ' ', $spaces );
+		$lines  = array();
+
+		foreach ( explode( "\n", $xml ) as $line ) {
+			if ( '' !== trim( $line ) ) {
+				$lines[] = $indent . $line;
+			}
+		}
+
+		return implode( "\n", $lines ) . "\n";
+	}
+
 	private function embed_xmp_in_jpeg( $file_path, $xmp_data ) {
-		// This is a simplified example - real XMP embedding would require
-		// more sophisticated JPEG manipulation
-
-		if ( ! function_exists( 'exif_read_data' ) ) {
-			return false;
-		}
-
-		// Read current image data with error handling
 		$image_data = @file_get_contents( $file_path );
-		if ( $image_data === false ) {
-			// error_log('RSL: Failed to read image file: ' . $file_path);
+		if ( false === $image_data || "\xFF\xD8" !== substr( $image_data, 0, 2 ) ) {
 			return false;
 		}
 
-		// For demonstration, we'll create a sidecar XMP file
-		// In a production environment, you'd use a proper XMP library
-		$xmp_file = str_replace( '.jpg', '.xmp', $file_path );
-		$xmp_file = str_replace( '.jpeg', '.xmp', $xmp_file );
+		$header        = "http://ns.adobe.com/xap/1.0/\0" . $xmp_data;
+		$segment_length = strlen( $header ) + 2;
 
-		$this->safe_write_rsl_file( $xmp_file, $xmp_data );
+		if ( $segment_length > 65535 ) {
+			return false;
+		}
 
-		return true;
+		$segment = "\xFF\xE1" . pack( 'n', $segment_length ) . $header;
+		$stripped = $this->strip_jpeg_xmp( $image_data );
+		$updated  = "\xFF\xD8" . $segment . substr( $stripped, 2 );
+
+		return $this->safe_write_attachment_file( $file_path, $updated );
+	}
+
+	private function strip_jpeg_xmp( $image_data ) {
+		$length = strlen( $image_data );
+		$offset = 2;
+		$output = substr( $image_data, 0, 2 );
+
+		while ( $offset + 4 <= $length ) {
+			if ( "\xFF" !== $image_data[ $offset ] ) {
+				break;
+			}
+
+			$marker = ord( $image_data[ $offset + 1 ] );
+
+			// Start of scan or end of image: no more metadata segments.
+			if ( 0xDA === $marker || 0xD9 === $marker ) {
+				break;
+			}
+
+			$segment_length = unpack( 'n', substr( $image_data, $offset + 2, 2 ) )[1];
+			if ( $segment_length < 2 ) {
+				break;
+			}
+
+			$segment = substr( $image_data, $offset, 2 + $segment_length );
+
+			if ( 0xE1 === $marker && false !== strpos( $segment, "http://ns.adobe.com/xap/1.0/\0" ) ) {
+				$offset += 2 + $segment_length;
+				continue;
+			}
+
+			$output .= $segment;
+			$offset += 2 + $segment_length;
+		}
+
+		return $output . substr( $image_data, $offset );
 	}
 
 	private function get_media_license( $attachment_id ) {
@@ -230,14 +289,26 @@ class RSL_Media {
 			'helps' => __( 'Select RSL license for this media file.', 'rsl-wp' ),
 		);
 
-		// Show current RSL status
 		$is_embedded = get_post_meta( $post->ID, '_rsl_embedded', true );
+		$sidecar     = get_post_meta( $post->ID, '_rsl_sidecar', true );
+
 		if ( $is_embedded ) {
 			$form_fields['rsl_status'] = array(
 				'label' => __( 'RSL Status', 'rsl-wp' ),
 				'input' => 'html',
 				'html'  => '<span style="color: green;">' . __( 'RSL metadata embedded', 'rsl-wp' ) . '</span>',
 				'helps' => __( 'This file contains embedded RSL licensing information.', 'rsl-wp' ),
+			);
+		} elseif ( $sidecar ) {
+			$form_fields['rsl_status'] = array(
+				'label' => __( 'RSL Status', 'rsl-wp' ),
+				'input' => 'html',
+				'html'  => '<span style="color: #996800;">' . __( 'RSL sidecar file', 'rsl-wp' ) . '</span>',
+				'helps' => sprintf(
+					/* translators: %s: sidecar file name. */
+					__( 'RSL metadata is stored next to this file as %s.', 'rsl-wp' ),
+					esc_html( wp_basename( $sidecar ) )
+				),
 			);
 		}
 
@@ -271,14 +342,13 @@ class RSL_Media {
 		if ( $column_name === 'rsl_license' ) {
 			$license_id  = get_post_meta( $post_id, '_rsl_license_id', true );
 			$is_embedded = get_post_meta( $post_id, '_rsl_embedded', true );
+			$sidecar     = get_post_meta( $post_id, '_rsl_sidecar', true );
 
 			if ( $license_id ) {
 				$license_data = $this->license_handler->get_license( $license_id );
 				if ( $license_data ) {
 					echo '<strong>' . esc_html( $license_data['name'] ) . '</strong>';
-					if ( $is_embedded ) {
-						echo '<br><span style="color: green; font-size: 11px;">✓ ' . esc_html__( 'Embedded', 'rsl-wp' ) . '</span>';
-					}
+					$this->show_metadata_status( $is_embedded, $sidecar );
 					return;
 				}
 			}
@@ -289,14 +359,20 @@ class RSL_Media {
 				$license_data = $this->license_handler->get_license( $global_license_id );
 				if ( $license_data ) {
 					echo '<em>' . esc_html( $license_data['name'] ) . ' (Global)</em>';
-					if ( $is_embedded ) {
-						echo '<br><span style="color: green; font-size: 11px;">✓ ' . esc_html__( 'Embedded', 'rsl-wp' ) . '</span>';
-					}
+					$this->show_metadata_status( $is_embedded, $sidecar );
 					return;
 				}
 			}
 
 			echo '<span style="color: #666;">' . esc_html__( 'No license', 'rsl-wp' ) . '</span>';
+		}
+	}
+
+	private function show_metadata_status( $is_embedded, $sidecar ) {
+		if ( $is_embedded ) {
+			echo '<br><span style="color: green; font-size: 11px;">' . esc_html__( 'Embedded', 'rsl-wp' ) . '</span>';
+		} elseif ( $sidecar ) {
+			echo '<br><span style="color: #996800; font-size: 11px;">' . esc_html__( 'Sidecar', 'rsl-wp' ) . '</span>';
 		}
 	}
 
@@ -309,6 +385,7 @@ class RSL_Media {
 			'has_license'  => false,
 			'license_data' => null,
 			'is_embedded'  => false,
+			'sidecar'      => '',
 			'xmp_data'     => null,
 			'xml_data'     => null,
 		);
@@ -320,6 +397,7 @@ class RSL_Media {
 		}
 
 		$info['is_embedded'] = (bool) get_post_meta( $attachment_id, '_rsl_embedded', true );
+		$info['sidecar']     = (string) get_post_meta( $attachment_id, '_rsl_sidecar', true );
 		$info['xmp_data']    = get_post_meta( $attachment_id, '_rsl_xmp_data', true );
 		$info['xml_data']    = get_post_meta( $attachment_id, '_rsl_xml_data', true );
 
@@ -340,55 +418,39 @@ class RSL_Media {
 	}
 
 	private function safe_write_rsl_file( $file_path, $content ) {
-		// Validate file path to prevent directory traversal
-		$file_path = realpath( dirname( $file_path ) ) . '/' . basename( $file_path );
-
-		// Ensure we're writing within WordPress upload directory
-		$upload_dir  = wp_upload_dir();
-		$upload_path = realpath( $upload_dir['path'] );
-		$target_dir  = realpath( dirname( $file_path ) );
-
-		if ( ! $upload_path || ! $target_dir || strpos( $target_dir, $upload_path ) !== 0 ) {
-			// error_log('RSL: Attempted to write file outside upload directory: ' . $file_path);
+		if ( ! $this->is_safe_upload_path( $file_path ) ) {
 			return false;
 		}
 
-		// Check if directory is writable using WP_Filesystem API
-		global $wp_filesystem;
-		if ( empty( $wp_filesystem ) ) {
-			require_once ABSPATH . 'wp-admin/includes/file.php';
-			WP_Filesystem();
-		}
-
-		$dir_path = dirname( $file_path );
-		if ( ! $wp_filesystem->is_writable( $dir_path ) ) {
-			// error_log('RSL: Cannot write to directory: ' . $dir_path);
-			return false;
-		}
-
-		// Validate file extension
 		$allowed_extensions = array( '.xml', '.xmp', '.rsl.xml' );
-		$file_extension     = '';
+		$allowed            = false;
 		foreach ( $allowed_extensions as $ext ) {
 			if ( substr( $file_path, -strlen( $ext ) ) === $ext ) {
-				$file_extension = $ext;
+				$allowed = true;
 				break;
 			}
 		}
 
-		if ( empty( $file_extension ) ) {
-			// error_log('RSL: Invalid file extension for RSL file: ' . $file_path);
+		if ( ! $allowed ) {
 			return false;
 		}
 
-		// Attempt to write file
-		$bytes_written = @file_put_contents( $file_path, $content );
+		return false !== @file_put_contents( $file_path, $content );
+	}
 
-		if ( $bytes_written === false ) {
-			// error_log('RSL: Failed to write RSL file: ' . $file_path);
+	private function safe_write_attachment_file( $file_path, $content ) {
+		if ( ! preg_match( '/\.jpe?g$/i', $file_path ) || ! $this->is_safe_upload_path( $file_path ) ) {
 			return false;
 		}
 
-		return true;
+		return false !== @file_put_contents( $file_path, $content );
+	}
+
+	private function is_safe_upload_path( $file_path ) {
+		$upload_dir  = wp_upload_dir();
+		$upload_path = realpath( $upload_dir['basedir'] );
+		$target_dir  = realpath( dirname( $file_path ) );
+
+		return $upload_path && $target_dir && 0 === strpos( $target_dir, $upload_path );
 	}
 }

@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/key` is `POST` only and returns `501` until key delivery is implemented.
 
 ### Fixed
+- Media RSL metadata now uses the attachment URL, emits a valid `<rsl:rsl>` XMP fragment, embeds XMP directly in JPEGs when possible, and labels sidecar files as sidecars instead of claiming every file is embedded.
 - License edit links are nonce-protected.
 - Public discovery URLs no longer require a nonce.
 - CORS and rate-limit headers no longer emit after output has started.
