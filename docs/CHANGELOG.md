@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Public, nonce-free license and feed URLs for canonical discovery (`get_license_url()`, `get_feed_url()`), plus `<link rel="license" type="application/rsl+xml">` in HTML output.
 - RSS items now carry their own `<rsl:content>` block through the shared RSL serializer.
 - `rsl_require_client_auth`, `rsl_builtin_server_url`, and `rsl_enable_builtin_cap` filters.
+- RSL 1.0 document fields: `max-age`, payment `<accepts>`, `<reporting>`, `attestation`/`contact`/`proof` legal declarations, `<alternate>` representations, and inline Schema.org JSON-LD.
+- Site-wide `/rsl.xml` document that groups licenses sharing a `content_url` into one `<content>` with multiple `<license>` children.
 
 ### Changed
 - RSL 1.0 vocabulary: usage tokens are `all`, `ai-all`, `ai-train`, `ai-input`, `ai-index`, and `search`; payment types are `free`, `purchase`, `subscription`, `training`, `crawl`, `use`, `contribution`, and `attribution`. Existing rows and legacy tokens are migrated automatically.
@@ -19,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `lastmod` is stored and emitted in GMT; existing local-time rows are converted once during upgrade.
 - Built-in server is advertised through the `server` attribute; `encrypted="true"` is only advertised for licenses with an external license server.
 - `/key` is `POST` only and returns `501` until key delivery is implemented.
+- RSL documents emit a `max-age` attribute (default 30 days) and omit `reporting` until both a category and profile are configured.
 
 ### Fixed
 - Media RSL metadata now uses the attachment URL, emits a valid `<rsl:rsl>` XMP fragment, embeds XMP directly in JPEGs when possible, and labels sidecar files as sidecars instead of claiming every file is embedded.

@@ -32,6 +32,11 @@ class RSL_License {
 	const PAYMENT_TYPES = array( 'free', 'purchase', 'subscription', 'training', 'crawl', 'use', 'contribution', 'attribution' );
 
 	/**
+	 * RSL 1.0 reporting categories.
+	 */
+	const REPORTING_TYPES = array( 'telemetry', 'provenance', 'audit' );
+
+	/**
 	 * Legacy token aliases mapped to their RSL 1.0 equivalents.
 	 */
 	const LEGACY_USAGE_TOKENS = array(
@@ -98,11 +103,24 @@ class RSL_License {
 		'schema_url'       => '%s',
 		'copyright_holder' => '%s',
 		'copyright_type'   => '%s',
-		'contact_email'    => '%s',
-		'contact_url'      => '%s',
-		'terms_url'        => '%s',
-		'active'           => '%d',
-		'updated_at'       => '%s',
+		'contact_email'      => '%s',
+		'contact_url'        => '%s',
+		'terms_url'          => '%s',
+		'max_age'            => '%d',
+		'accepts_type'       => '%s',
+		'accepts_body'       => '%s',
+		'reporting_type'     => '%s',
+		'reporting_profile'  => '%s',
+		'reporting_endpoint' => '%s',
+		'reporting_body'     => '%s',
+		'legal_attestation'  => '%d',
+		'legal_contact'      => '%s',
+		'legal_proof'        => '%s',
+		'alternate_type'     => '%s',
+		'alternate_url'      => '%s',
+		'schema_inline'      => '%s',
+		'active'             => '%d',
+		'updated_at'         => '%s',
 	);
 
 	/**
@@ -147,10 +165,23 @@ class RSL_License {
 			'schema_url'       => '',
 			'copyright_holder' => '',
 			'copyright_type'   => '',
-			'contact_email'    => '',
-			'contact_url'      => '',
-			'terms_url'        => '',
-			'active'           => 1,
+			'contact_email'      => '',
+			'contact_url'        => '',
+			'terms_url'          => '',
+			'max_age'            => 30,
+			'accepts_type'       => '',
+			'accepts_body'       => '',
+			'reporting_type'     => '',
+			'reporting_profile'  => '',
+			'reporting_endpoint' => '',
+			'reporting_body'     => '',
+			'legal_attestation'  => 0,
+			'legal_contact'      => '',
+			'legal_proof'        => '',
+			'alternate_type'     => '',
+			'alternate_url'      => '',
+			'schema_inline'      => '',
+			'active'             => 1,
 		);
 
 		$data = $this->sanitize_license_data( wp_parse_args( $data, $defaults ) );
@@ -432,7 +463,58 @@ class RSL_License {
 
 				case 'encrypted':
 				case 'active':
+				case 'legal_attestation':
 					$data[ $key ] = empty( $value ) ? 0 : 1;
+					break;
+
+				case 'max_age':
+					$max_age      = intval( $value );
+					$data[ $key ] = $max_age > 0 ? min( 3650, $max_age ) : 30;
+					break;
+
+				case 'accepts_type':
+				case 'alternate_type':
+					$value        = strtolower( sanitize_text_field( $value ) );
+					$data[ $key ] = preg_match( '#^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$#', $value ) ? $value : '';
+					break;
+
+				case 'reporting_type':
+					$data[ $key ] = self::normalize_reporting_type( $value );
+					break;
+
+				case 'legal_contact':
+					$value = trim( sanitize_text_field( $value ) );
+					if ( is_email( $value ) ) {
+						$data[ $key ] = sanitize_email( $value );
+					} else {
+						$data[ $key ] = esc_url_raw( $value );
+					}
+					break;
+
+				case 'legal_proof':
+					$proofs = preg_split( '/\s+/', trim( (string) $value ), -1, PREG_SPLIT_NO_EMPTY );
+					$proofs = array_filter( array_map( 'esc_url_raw', (array) $proofs ) );
+					$data[ $key ] = implode( ' ', $proofs );
+					break;
+
+				case 'alternate_url':
+					$value = trim( (string) $value );
+					if ( 0 === strpos( $value, '/' ) && 0 !== strpos( $value, '//' ) ) {
+						$data[ $key ] = preg_match( '#^/[A-Za-z0-9._~!\'()*+,;=:@/\-%]*$#', $value ) ? $value : '';
+					} else {
+						$data[ $key ] = esc_url_raw( $value );
+					}
+					break;
+
+				case 'reporting_profile':
+				case 'reporting_endpoint':
+					$data[ $key ] = esc_url_raw( trim( (string) $value ) );
+					break;
+
+				case 'accepts_body':
+				case 'reporting_body':
+				case 'schema_inline':
+					$data[ $key ] = sanitize_textarea_field( $value );
 					break;
 
 				case 'amount':
@@ -526,13 +608,7 @@ class RSL_License {
 
 		$options = wp_parse_args( $options, $defaults );
 
-		foreach ( self::TOKEN_LIST_FIELDS as $field ) {
-			$license_data[ $field ] = self::normalize_token_list(
-				$license_data[ $field ] ?? '',
-				in_array( $field, self::USAGE_LIST_FIELDS, true )
-			);
-		}
-		$license_data['payment_type'] = self::normalize_payment_type( $license_data['payment_type'] ?? 'free' );
+		$license_data = $this->prepare_license_for_xml( $license_data );
 
 		$xml = '';
 
@@ -541,11 +617,148 @@ class RSL_License {
 		}
 
 		if ( $options['root'] ) {
-			$xml .= '<rsl xmlns="' . esc_attr( $options['namespace'] ) . '">' . "\n";
+			$xml .= '<rsl xmlns="' . esc_attr( $options['namespace'] ) . '" max-age="' . esc_attr( $this->get_max_age( $license_data, $options ) ) . '">' . "\n";
 		}
-		$xml .= '  <content url="' . esc_attr( $license_data['content_url'] ) . '"';
 
-		$server_url = ! empty( $license_data['server_url'] ) ? $license_data['server_url'] : '';
+		$xml .= $this->render_content( array( $license_data ) );
+
+		if ( $options['root'] ) {
+			$xml .= '</rsl>';
+		}
+
+		return $this->apply_prefix( $xml, $options['prefix'] );
+	}
+
+	/**
+	 * Generate one RSL document from several licenses.
+	 *
+	 * Licenses sharing a content_url are grouped into one <content> with
+	 * multiple <license> children, so publishers can offer tiered terms such
+	 * as free search indexing and paid AI training in a single document.
+	 *
+	 * @param array $licenses License data arrays.
+	 * @param array $options  Optional settings for XML generation.
+	 * @return string Generated RSL XML string.
+	 */
+	public function generate_rsl_document( $licenses, $options = array() ) {
+		$defaults = array(
+			'namespace'  => defined( 'RSL_NAMESPACE' ) ? RSL_NAMESPACE : 'https://rslstandard.org/rsl',
+			'standalone' => true,
+			'prefix'     => '',
+			'max_age'    => 0,
+		);
+
+		$options = wp_parse_args( $options, $defaults );
+		$groups  = array();
+		$max_age = 0;
+
+		foreach ( (array) $licenses as $license_data ) {
+			$license_data = $this->prepare_license_for_xml( $license_data );
+			$key          = (string) $license_data['content_url'];
+			$groups[ $key ][] = $license_data;
+
+			$row_max_age = $this->get_max_age( $license_data, array() );
+			$max_age     = 0 === $max_age ? $row_max_age : min( $max_age, $row_max_age );
+		}
+
+		if ( ! empty( $options['max_age'] ) ) {
+			$max_age = max( 1, min( 3650, intval( $options['max_age'] ) ) );
+		}
+
+		if ( 0 === $max_age ) {
+			$max_age = 30;
+		}
+
+		$xml = '';
+		if ( $options['standalone'] ) {
+			$xml .= '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+		}
+
+		$xml .= '<rsl xmlns="' . esc_attr( $options['namespace'] ) . '" max-age="' . esc_attr( $max_age ) . '">' . "\n";
+
+		foreach ( $groups as $group ) {
+			$xml .= $this->render_content( $group );
+		}
+
+		$xml .= '</rsl>';
+
+		return $this->apply_prefix( $xml, $options['prefix'] );
+	}
+
+	/**
+	 * Normalize a license row for XML output.
+	 *
+	 * @param array $license_data License data.
+	 * @return array
+	 */
+	private function prepare_license_for_xml( $license_data ) {
+		$license_data = (array) $license_data;
+		$license_data = wp_parse_args(
+			$license_data,
+			array(
+				'content_url'         => '',
+				'server_url'          => '',
+				'encrypted'           => 0,
+				'lastmod'             => '',
+				'max_age'             => 30,
+				'payment_type'        => 'free',
+				'standard_url'        => '',
+				'custom_url'          => '',
+				'amount'              => 0,
+				'currency'            => 'USD',
+				'accepts_type'        => '',
+				'accepts_body'        => '',
+				'reporting_type'      => '',
+				'reporting_profile'   => '',
+				'reporting_endpoint'  => '',
+				'reporting_body'      => '',
+				'legal_attestation'   => 0,
+				'legal_contact'       => '',
+				'legal_proof'         => '',
+				'alternate_type'      => '',
+				'alternate_url'       => '',
+				'schema_inline'       => '',
+				'schema_url'          => '',
+				'copyright_holder'    => '',
+				'copyright_type'      => '',
+				'contact_email'       => '',
+				'contact_url'         => '',
+				'terms_url'           => '',
+				'warranty'            => '',
+				'disclaimer'          => '',
+			)
+		);
+
+		foreach ( self::TOKEN_LIST_FIELDS as $field ) {
+			$license_data[ $field ] = self::normalize_token_list(
+				$license_data[ $field ] ?? '',
+				in_array( $field, self::USAGE_LIST_FIELDS, true )
+			);
+		}
+
+		$license_data['payment_type']    = self::normalize_payment_type( $license_data['payment_type'] ?? 'free' );
+		$license_data['reporting_type']  = self::normalize_reporting_type( $license_data['reporting_type'] ?? '' );
+		$license_data['legal_attestation'] = empty( $license_data['legal_attestation'] ) ? 0 : 1;
+
+		return $license_data;
+	}
+
+	private function get_max_age( $license_data, $options ) {
+		$max_age = $options['max_age'] ?? ( $license_data['max_age'] ?? 0 );
+		$max_age = intval( $max_age );
+
+		if ( $max_age <= 0 ) {
+			$max_age = 30;
+		}
+
+		return max( 1, min( 3650, $max_age ) );
+	}
+
+	private function render_content( $licenses ) {
+		$first = $licenses[0];
+		$xml   = '  <content url="' . esc_attr( $first['content_url'] ) . '"';
+
+		$server_url = ! empty( $first['server_url'] ) ? $first['server_url'] : '';
 		if ( '' === $server_url ) {
 			/**
 			 * Filter the server advertised for licenses that use the built-in
@@ -554,7 +767,7 @@ class RSL_License {
 			 * @param string $server_url   Built-in OLP base URL.
 			 * @param array  $license_data License data.
 			 */
-			$server_url = apply_filters( 'rsl_builtin_server_url', rest_url( 'rsl-olp/v1' ), $license_data );
+			$server_url = apply_filters( 'rsl_builtin_server_url', rest_url( 'rsl-olp/v1' ), $first );
 		}
 
 		if ( ! empty( $server_url ) ) {
@@ -563,17 +776,40 @@ class RSL_License {
 
 		// The built-in server does not implement EMS yet, so only external
 		// servers may advertise encrypted content.
-		if ( (int) $license_data['encrypted'] === 1 && ! empty( $license_data['server_url'] ) ) {
+		if ( (int) $first['encrypted'] === 1 && ! empty( $first['server_url'] ) ) {
 			$xml .= ' encrypted="true"';
 		}
 
-		if ( ! empty( $license_data['lastmod'] ) ) {
-			$xml .= ' lastmod="' . esc_attr( gmdate( 'c', strtotime( $license_data['lastmod'] . ' UTC' ) ) ) . '"';
+		if ( ! empty( $first['lastmod'] ) ) {
+			$xml .= ' lastmod="' . esc_attr( gmdate( 'c', strtotime( $first['lastmod'] . ' UTC' ) ) ) . '"';
 		}
 
 		$xml .= '>' . "\n";
+		$xml .= $this->render_content_metadata( $first );
 
-		if ( ! empty( $license_data['schema_url'] ) ) {
+		foreach ( $licenses as $license_data ) {
+			$xml .= $this->render_license( $license_data );
+		}
+
+		if ( ! empty( $first['alternate_url'] ) ) {
+			$xml .= '    <alternate';
+			if ( ! empty( $first['alternate_type'] ) ) {
+				$xml .= ' type="' . esc_attr( $first['alternate_type'] ) . '"';
+			}
+			$xml .= '>' . esc_html( $first['alternate_url'] ) . '</alternate>' . "\n";
+		}
+
+		$xml .= '  </content>' . "\n";
+
+		return $xml;
+	}
+
+	private function render_content_metadata( $license_data ) {
+		$xml = '';
+
+		if ( ! empty( $license_data['schema_inline'] ) ) {
+			$xml .= '    <schema type="application/ld+json">' . $this->cdata( $license_data['schema_inline'] ) . '</schema>' . "\n";
+		} elseif ( ! empty( $license_data['schema_url'] ) ) {
 			$xml .= '    <schema>' . esc_html( $license_data['schema_url'] ) . '</schema>' . "\n";
 		}
 
@@ -595,52 +831,28 @@ class RSL_License {
 			$xml .= '    <terms>' . esc_html( $license_data['terms_url'] ) . '</terms>' . "\n";
 		}
 
-		$xml .= '    <license>' . "\n";
+		return $xml;
+	}
 
-		if ( ! empty( $license_data['permits_usage'] ) ) {
-			$xml .= '      <permits type="usage">' . esc_html( $license_data['permits_usage'] ) . '</permits>' . "\n";
-		}
+	private function render_license( $license_data ) {
+		$xml = '    <license>' . "\n";
 
-		if ( ! empty( $license_data['permits_user'] ) ) {
-			$xml .= '      <permits type="user">' . esc_html( $license_data['permits_user'] ) . '</permits>' . "\n";
-		}
-
-		if ( ! empty( $license_data['permits_geo'] ) ) {
-			$xml .= '      <permits type="geo">' . esc_html( $license_data['permits_geo'] ) . '</permits>' . "\n";
-		}
-
-		if ( ! empty( $license_data['prohibits_usage'] ) ) {
-			$xml .= '      <prohibits type="usage">' . esc_html( $license_data['prohibits_usage'] ) . '</prohibits>' . "\n";
-		}
-
-		if ( ! empty( $license_data['prohibits_user'] ) ) {
-			$xml .= '      <prohibits type="user">' . esc_html( $license_data['prohibits_user'] ) . '</prohibits>' . "\n";
-		}
-
-		if ( ! empty( $license_data['prohibits_geo'] ) ) {
-			$xml .= '      <prohibits type="geo">' . esc_html( $license_data['prohibits_geo'] ) . '</prohibits>' . "\n";
-		}
-
-		if ( ! empty( $license_data['payment_type'] ) && 'free' !== $license_data['payment_type'] ) {
-			$xml .= '      <payment type="' . esc_attr( $license_data['payment_type'] ) . '">' . "\n";
-
-			if ( ! empty( $license_data['standard_url'] ) ) {
-				$xml .= '        <standard>' . esc_html( $license_data['standard_url'] ) . '</standard>' . "\n";
+		foreach ( array( 'usage', 'user', 'geo' ) as $type ) {
+			$field = 'permits_' . $type;
+			if ( ! empty( $license_data[ $field ] ) ) {
+				$xml .= '      <permits type="' . esc_attr( $type ) . '">' . esc_html( $license_data[ $field ] ) . '</permits>' . "\n";
 			}
-
-			if ( ! empty( $license_data['custom_url'] ) ) {
-				$xml .= '        <custom>' . esc_html( $license_data['custom_url'] ) . '</custom>' . "\n";
-			}
-
-			if ( ! empty( $license_data['amount'] ) && $license_data['amount'] > 0 ) {
-				$xml .= '        <amount currency="' . esc_attr( $license_data['currency'] ) . '">' .
-						esc_html( $license_data['amount'] ) . '</amount>' . "\n";
-			}
-
-			$xml .= '      </payment>' . "\n";
-		} else {
-			$xml .= '      <payment type="free"/>' . "\n";
 		}
+
+		foreach ( array( 'usage', 'user', 'geo' ) as $type ) {
+			$field = 'prohibits_' . $type;
+			if ( ! empty( $license_data[ $field ] ) ) {
+				$xml .= '      <prohibits type="' . esc_attr( $type ) . '">' . esc_html( $license_data[ $field ] ) . '</prohibits>' . "\n";
+			}
+		}
+
+		$xml .= $this->render_payment( $license_data );
+		$xml .= $this->render_reporting( $license_data );
 
 		if ( ! empty( $license_data['warranty'] ) ) {
 			$xml .= '      <legal type="warranty">' . esc_html( $license_data['warranty'] ) . '</legal>' . "\n";
@@ -650,22 +862,99 @@ class RSL_License {
 			$xml .= '      <legal type="disclaimer">' . esc_html( $license_data['disclaimer'] ) . '</legal>' . "\n";
 		}
 
-		$xml .= '    </license>' . "\n";
-		$xml .= '  </content>' . "\n";
-		if ( $options['root'] ) {
-			$xml .= '</rsl>';
+		if ( ! empty( $license_data['legal_attestation'] ) ) {
+			$xml .= '      <legal type="attestation">true</legal>' . "\n";
 		}
 
-		if ( ! empty( $options['prefix'] ) ) {
-			$tags = 'content|schema|copyright|terms|license|permits|prohibits|payment|standard|custom|amount|legal';
-			$xml  = preg_replace(
-				'/<(\/?)(' . $tags . ')(\s|>|\/)/',
-				'<$1' . preg_quote( $options['prefix'], '/' ) . '$2$3',
-				$xml
-			);
+		if ( ! empty( $license_data['legal_contact'] ) ) {
+			$xml .= '      <legal type="contact">' . esc_html( $license_data['legal_contact'] ) . '</legal>' . "\n";
+		}
+
+		if ( ! empty( $license_data['legal_proof'] ) ) {
+			$xml .= '      <legal type="proof">' . esc_html( $license_data['legal_proof'] ) . '</legal>' . "\n";
+		}
+
+		$xml .= '    </license>' . "\n";
+
+		return $xml;
+	}
+
+	private function render_payment( $license_data ) {
+		$has_accepts = ! empty( $license_data['accepts_type'] );
+		$is_free     = 'free' === $license_data['payment_type'];
+
+		if ( $is_free && ! $has_accepts ) {
+			return '      <payment type="free"/>' . "\n";
+		}
+
+		$xml = '      <payment';
+		if ( ! $is_free ) {
+			$xml .= ' type="' . esc_attr( $license_data['payment_type'] ) . '"';
+		}
+		$xml .= '>' . "\n";
+
+		if ( ! empty( $license_data['standard_url'] ) ) {
+			$xml .= '        <standard>' . esc_html( $license_data['standard_url'] ) . '</standard>' . "\n";
+		}
+
+		if ( ! empty( $license_data['custom_url'] ) ) {
+			$xml .= '        <custom>' . esc_html( $license_data['custom_url'] ) . '</custom>' . "\n";
+		}
+
+		if ( ! empty( $license_data['amount'] ) && $license_data['amount'] > 0 ) {
+			$xml .= '        <amount currency="' . esc_attr( $license_data['currency'] ) . '">' .
+					esc_html( $license_data['amount'] ) . '</amount>' . "\n";
+		}
+
+		if ( $has_accepts ) {
+			$xml .= '        <accepts type="' . esc_attr( $license_data['accepts_type'] ) . '"';
+			if ( ! empty( $license_data['accepts_body'] ) ) {
+				$xml .= '>' . $this->cdata( $license_data['accepts_body'] ) . '</accepts>' . "\n";
+			} else {
+				$xml .= '/>' . "\n";
+			}
+		}
+
+		$xml .= '      </payment>' . "\n";
+
+		return $xml;
+	}
+
+	private function render_reporting( $license_data ) {
+		if ( empty( $license_data['reporting_type'] ) || empty( $license_data['reporting_profile'] ) ) {
+			return '';
+		}
+
+		$xml = '      <reporting type="' . esc_attr( $license_data['reporting_type'] ) . '" profile="' . esc_attr( $license_data['reporting_profile'] ) . '"';
+		if ( ! empty( $license_data['reporting_endpoint'] ) ) {
+			$xml .= ' endpoint="' . esc_attr( $license_data['reporting_endpoint'] ) . '"';
+		}
+
+		if ( ! empty( $license_data['reporting_body'] ) ) {
+			$xml .= '>' . $this->cdata( $license_data['reporting_body'] ) . '</reporting>' . "\n";
+		} else {
+			$xml .= '/>' . "\n";
 		}
 
 		return $xml;
+	}
+
+	private function cdata( $value ) {
+		return '<![CDATA[' . str_replace( ']]>', ']]]]><![CDATA[>', (string) $value ) . ']]>';
+	}
+
+	private function apply_prefix( $xml, $prefix ) {
+		if ( empty( $prefix ) ) {
+			return $xml;
+		}
+
+		$tags = 'content|schema|copyright|terms|license|permits|prohibits|payment|standard|custom|amount|accepts|reporting|legal|alternate';
+
+		return preg_replace(
+			'/<(\/?)(' . $tags . ')(\s|>|\/)/',
+			'<$1' . preg_quote( $prefix, '/' ) . '$2$3',
+			$xml
+		);
 	}
 
 	/**
@@ -682,6 +971,18 @@ class RSL_License {
 		}
 
 		return in_array( $value, self::PAYMENT_TYPES, true ) ? $value : 'free';
+	}
+
+	/**
+	 * Normalize a reporting category to the RSL 1.0 vocabulary.
+	 *
+	 * @param string $value Reporting type.
+	 * @return string
+	 */
+	public static function normalize_reporting_type( $value ) {
+		$value = strtolower( trim( (string) $value ) );
+
+		return in_array( $value, self::REPORTING_TYPES, true ) ? $value : '';
 	}
 
 	/**

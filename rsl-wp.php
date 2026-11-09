@@ -41,7 +41,7 @@ class RSL_Licensing {
 	/**
 	 * Schema/data version used to gate one-time migrations.
 	 */
-	const DB_VERSION = '1';
+	const DB_VERSION = '2';
 
 	private static $instance = null;
 
@@ -149,6 +149,9 @@ class RSL_Licensing {
 
 		global $wpdb;
 
+		// dbDelta adds the RSL 1.0 metadata columns to existing installs.
+		$this->create_tables();
+
 		// The namespace is fixed by RSL 1.0 and no longer configurable.
 		delete_option( 'rsl_default_namespace' );
 
@@ -198,6 +201,7 @@ class RSL_Licensing {
 		}
 
 		update_option( 'rsl_db_version', self::DB_VERSION );
+		add_action( 'wp_loaded', 'flush_rewrite_rules' );
 	}
 
 	public function add_plugin_action_links( $links ) {
@@ -242,6 +246,19 @@ class RSL_Licensing {
             contact_email varchar(255),
             contact_url varchar(255),
             terms_url varchar(255),
+            max_age smallint(5) unsigned DEFAULT 30,
+            accepts_type varchar(255),
+            accepts_body text,
+            reporting_type varchar(20),
+            reporting_profile varchar(255),
+            reporting_endpoint varchar(255),
+            reporting_body text,
+            legal_attestation tinyint(1) DEFAULT 0,
+            legal_contact varchar(255),
+            legal_proof text,
+            alternate_type varchar(100),
+            alternate_url varchar(255),
+            schema_inline text,
             active tinyint(1) DEFAULT 1,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

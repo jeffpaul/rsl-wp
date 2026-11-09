@@ -363,6 +363,80 @@ class TestRSLLicense extends TestCase {
 	}
 
 	/**
+	 * RSL 1.0 root, payment, reporting, legal, and content metadata fields.
+	 *
+	 * @covers RSL_License::generate_rsl_xml
+	 */
+	public function test_generate_rsl_xml_rsl_1_0_fields() {
+		$license_data = array(
+			'content_url'        => '/spec-fields',
+			'max_age'            => 90,
+			'payment_type'       => 'crawl',
+			'accepts_type'       => 'application/x402+json',
+			'accepts_body'       => '{"scheme":"deferred"}',
+			'reporting_type'     => 'telemetry',
+			'reporting_profile'  => 'https://contenttelemetry.org/profiles/spur',
+			'reporting_endpoint' => 'https://reports.example.com/telemetry',
+			'reporting_body'     => '{"privacy_level":"minimal"}',
+			'legal_attestation'  => 1,
+			'legal_contact'      => 'mailto:legal@example.com',
+			'legal_proof'        => 'https://example.com/proof/1 https://example.com/proof/2',
+			'alternate_type'     => 'application/json',
+			'alternate_url'      => '/exports/site.json',
+			'schema_inline'      => '{"@context":"https://schema.org","@type":"Book"}',
+		);
+
+		$xml = $this->license_handler->generate_rsl_xml( $license_data );
+
+		$this->assertValidRslXml( $xml );
+		$this->assertStringContains( 'max-age="90"', $xml );
+		$this->assertStringContains( '<accepts type="application/x402+json">', $xml );
+		$this->assertStringContains( '<reporting type="telemetry"', $xml );
+		$this->assertStringContains( 'profile="https://contenttelemetry.org/profiles/spur"', $xml );
+		$this->assertStringContains( '<legal type="attestation">true</legal>', $xml );
+		$this->assertStringContains( '<legal type="contact">mailto:legal@example.com</legal>', $xml );
+		$this->assertStringContains( '<legal type="proof">https://example.com/proof/1 https://example.com/proof/2</legal>', $xml );
+		$this->assertStringContains( '<alternate type="application/json">/exports/site.json</alternate>', $xml );
+		$this->assertStringContains( '<schema type="application/ld+json">', $xml );
+		$this->assertStringContains( '{"@context":"https://schema.org","@type":"Book"}', $xml );
+	}
+
+	/**
+	 * Multiple licenses for one content and multiple contents in one document.
+	 *
+	 * @covers RSL_License::generate_rsl_document
+	 */
+	public function test_generate_rsl_document_groups_licenses() {
+		$licenses = array(
+			array(
+				'content_url'   => '/tiered',
+				'payment_type'  => 'free',
+				'permits_usage' => 'search',
+			),
+			array(
+				'content_url'   => '/tiered',
+				'payment_type'  => 'purchase',
+				'amount'        => 10,
+				'currency'      => 'USD',
+				'permits_usage' => 'ai-train',
+			),
+			array(
+				'content_url'   => '/other',
+				'payment_type'  => 'free',
+				'permits_usage' => 'all',
+			),
+		);
+
+		$xml = $this->license_handler->generate_rsl_document( $licenses );
+
+		$this->assertValidRslXml( $xml );
+		$this->assertSame( 2, substr_count( $xml, '<content ' ) );
+		$this->assertSame( 3, substr_count( $xml, '<license>' ) );
+		$this->assertStringContains( 'url="/tiered"', $xml );
+		$this->assertStringContains( 'url="/other"', $xml );
+	}
+
+	/**
 	 * Test license validation
 	 *
 	 * @covers RSL_License::validate_license_data

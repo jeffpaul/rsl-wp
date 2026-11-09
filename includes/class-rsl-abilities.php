@@ -101,6 +101,62 @@ class RSL_Abilities {
 							'format'      => 'uri',
 							'description' => 'Optional RSL License Server URL for authentication',
 						),
+						'max_age'            => array(
+							'type'        => 'integer',
+							'minimum'     => 1,
+							'maximum'     => 3650,
+							'default'     => 30,
+							'description' => 'Days clients may treat the RSL document as authoritative',
+						),
+						'accepts_type'       => array(
+							'type'        => 'string',
+							'description' => 'Media type for an accepted payment protocol, such as application/x402+json',
+						),
+						'accepts_body'       => array(
+							'type'        => 'string',
+							'description' => 'Protocol-specific payment metadata emitted inside CDATA',
+						),
+						'reporting_type'     => array(
+							'type'        => 'string',
+							'enum'        => RSL_License::REPORTING_TYPES,
+							'description' => 'Reporting category: telemetry, provenance, or audit',
+						),
+						'reporting_profile'  => array(
+							'type'        => 'string',
+							'description' => 'Absolute URI identifying the reporting profile',
+						),
+						'reporting_endpoint' => array(
+							'type'        => 'string',
+							'description' => 'Optional endpoint that receives reports',
+						),
+						'reporting_body'     => array(
+							'type'        => 'string',
+							'description' => 'Profile-specific reporting configuration emitted inside CDATA',
+						),
+						'legal_attestation'  => array(
+							'type'        => 'boolean',
+							'description' => 'Whether the publisher attests they are authorized to assert these rights',
+						),
+						'legal_contact'      => array(
+							'type'        => 'string',
+							'description' => 'URL or email for rights-holder contact',
+						),
+						'legal_proof'        => array(
+							'type'        => 'string',
+							'description' => 'Space-separated absolute URIs proving authority',
+						),
+						'alternate_type'     => array(
+							'type'        => 'string',
+							'description' => 'Media type of an alternate representation',
+						),
+						'alternate_url'      => array(
+							'type'        => 'string',
+							'description' => 'URL or path of an alternate representation',
+						),
+						'schema_inline'      => array(
+							'type'        => 'string',
+							'description' => 'Inline Schema.org JSON-LD emitted inside CDATA',
+						),
 					),
 					'required'             => array( 'name', 'content_url' ),
 					'additionalProperties' => false,
@@ -212,6 +268,62 @@ class RSL_Abilities {
 							'type'        => 'string',
 							'format'      => 'uri',
 							'description' => 'Optional RSL License Server URL for authentication',
+						),
+						'max_age'            => array(
+							'type'        => 'integer',
+							'minimum'     => 1,
+							'maximum'     => 3650,
+							'default'     => 30,
+							'description' => 'Days clients may treat the RSL document as authoritative',
+						),
+						'accepts_type'       => array(
+							'type'        => 'string',
+							'description' => 'Media type for an accepted payment protocol, such as application/x402+json',
+						),
+						'accepts_body'       => array(
+							'type'        => 'string',
+							'description' => 'Protocol-specific payment metadata emitted inside CDATA',
+						),
+						'reporting_type'     => array(
+							'type'        => 'string',
+							'enum'        => RSL_License::REPORTING_TYPES,
+							'description' => 'Reporting category: telemetry, provenance, or audit',
+						),
+						'reporting_profile'  => array(
+							'type'        => 'string',
+							'description' => 'Absolute URI identifying the reporting profile',
+						),
+						'reporting_endpoint' => array(
+							'type'        => 'string',
+							'description' => 'Optional endpoint that receives reports',
+						),
+						'reporting_body'     => array(
+							'type'        => 'string',
+							'description' => 'Profile-specific reporting configuration emitted inside CDATA',
+						),
+						'legal_attestation'  => array(
+							'type'        => 'boolean',
+							'description' => 'Whether the publisher attests they are authorized to assert these rights',
+						),
+						'legal_contact'      => array(
+							'type'        => 'string',
+							'description' => 'URL or email for rights-holder contact',
+						),
+						'legal_proof'        => array(
+							'type'        => 'string',
+							'description' => 'Space-separated absolute URIs proving authority',
+						),
+						'alternate_type'     => array(
+							'type'        => 'string',
+							'description' => 'Media type of an alternate representation',
+						),
+						'alternate_url'      => array(
+							'type'        => 'string',
+							'description' => 'URL or path of an alternate representation',
+						),
+						'schema_inline'      => array(
+							'type'        => 'string',
+							'description' => 'Inline Schema.org JSON-LD emitted inside CDATA',
 						),
 					),
 					'required'             => array( 'license_id' ),

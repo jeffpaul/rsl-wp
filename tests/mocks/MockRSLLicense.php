@@ -100,10 +100,50 @@ if ( ! class_exists( 'RSL_License' ) ) {
 		}
 
 		public function generate_rsl_xml( $license_data ) {
+			return $this->generate_rsl_document( array( $license_data ) );
+		}
+
+		public function generate_rsl_document( $licenses ) {
+			$groups = array();
+			foreach ( (array) $licenses as $license_data ) {
+				$groups[ (string) $license_data['content_url'] ][] = $license_data;
+			}
+
 			$xml  = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-			$xml .= '<rsl xmlns="https://rslstandard.org/rsl">' . "\n";
-			$xml .= '  <content url="' . htmlspecialchars( $license_data['content_url'] ) . '">' . "\n";
-			$xml .= '    <license>' . "\n";
+			$xml .= '<rsl xmlns="https://rslstandard.org/rsl" max-age="' . intval( $license_data['max_age'] ?? 30 ) . '">' . "\n";
+
+			foreach ( $groups as $group ) {
+				$first = $group[0];
+				$xml  .= '  <content url="' . htmlspecialchars( $first['content_url'] ) . '">' . "\n";
+
+				if ( ! empty( $first['schema_inline'] ) ) {
+					$xml .= '    <schema type="application/ld+json"><![CDATA[' . $first['schema_inline'] . ']]></schema>' . "\n";
+				} elseif ( ! empty( $first['schema_url'] ) ) {
+					$xml .= '    <schema>' . htmlspecialchars( $first['schema_url'] ) . '</schema>' . "\n";
+				}
+
+				foreach ( $group as $license_data ) {
+					$xml .= $this->render_mock_license( $license_data );
+				}
+
+				if ( ! empty( $first['alternate_url'] ) ) {
+					$xml .= '    <alternate';
+					if ( ! empty( $first['alternate_type'] ) ) {
+						$xml .= ' type="' . htmlspecialchars( $first['alternate_type'] ) . '"';
+					}
+					$xml .= '>' . htmlspecialchars( $first['alternate_url'] ) . '</alternate>' . "\n";
+				}
+
+				$xml .= '  </content>' . "\n";
+			}
+
+			$xml .= '</rsl>';
+
+			return $xml;
+		}
+
+		private function render_mock_license( $license_data ) {
+			$xml  = '    <license>' . "\n";
 
 			if ( ! empty( $license_data['permits_usage'] ) ) {
 				$xml .= '      <permits type="usage">' . htmlspecialchars( $license_data['permits_usage'] ) . '</permits>' . "\n";
@@ -113,12 +153,13 @@ if ( ! class_exists( 'RSL_License' ) ) {
 				$xml .= '      <prohibits type="usage">' . htmlspecialchars( $license_data['prohibits_usage'] ) . '</prohibits>' . "\n";
 			}
 
-			$xml .= '      <payment type="' . htmlspecialchars( $license_data['payment_type'] ) . '"';
+			$xml .= '      <payment type="' . htmlspecialchars( $license_data['payment_type'] ?? 'free' ) . '"';
 
 			$has_amount   = isset( $license_data['amount'] ) && $license_data['amount'] > 0;
 			$has_standard = ! empty( $license_data['standard_url'] );
+			$has_accepts  = ! empty( $license_data['accepts_type'] );
 
-			if ( $has_amount || $has_standard ) {
+			if ( $has_amount || $has_standard || $has_accepts ) {
 				$xml .= '>' . "\n";
 
 				if ( $has_amount ) {
@@ -131,9 +172,42 @@ if ( ! class_exists( 'RSL_License' ) ) {
 					$xml .= '        <standard>' . htmlspecialchars( $license_data['standard_url'] ) . '</standard>' . "\n";
 				}
 
+				if ( $has_accepts ) {
+					$xml .= '        <accepts type="' . htmlspecialchars( $license_data['accepts_type'] ) . '"';
+					if ( ! empty( $license_data['accepts_body'] ) ) {
+						$xml .= '><![CDATA[' . $license_data['accepts_body'] . ']]></accepts>' . "\n";
+					} else {
+						$xml .= '/>' . "\n";
+					}
+				}
+
 				$xml .= '      </payment>' . "\n";
 			} else {
 				$xml .= '/>' . "\n";
+			}
+
+			if ( ! empty( $license_data['reporting_type'] ) && ! empty( $license_data['reporting_profile'] ) ) {
+				$xml .= '      <reporting type="' . htmlspecialchars( $license_data['reporting_type'] ) . '" profile="' . htmlspecialchars( $license_data['reporting_profile'] ) . '"';
+				if ( ! empty( $license_data['reporting_endpoint'] ) ) {
+					$xml .= ' endpoint="' . htmlspecialchars( $license_data['reporting_endpoint'] ) . '"';
+				}
+				if ( ! empty( $license_data['reporting_body'] ) ) {
+					$xml .= '><![CDATA[' . $license_data['reporting_body'] . ']]></reporting>' . "\n";
+				} else {
+					$xml .= '/>' . "\n";
+				}
+			}
+
+			if ( ! empty( $license_data['legal_attestation'] ) ) {
+				$xml .= '      <legal type="attestation">true</legal>' . "\n";
+			}
+
+			if ( ! empty( $license_data['legal_contact'] ) ) {
+				$xml .= '      <legal type="contact">' . htmlspecialchars( $license_data['legal_contact'] ) . '</legal>' . "\n";
+			}
+
+			if ( ! empty( $license_data['legal_proof'] ) ) {
+				$xml .= '      <legal type="proof">' . htmlspecialchars( $license_data['legal_proof'] ) . '</legal>' . "\n";
 			}
 
 			if ( ! empty( $license_data['name'] ) ) {
@@ -145,8 +219,6 @@ if ( ! class_exists( 'RSL_License' ) ) {
 			}
 
 			$xml .= '    </license>' . "\n";
-			$xml .= '  </content>' . "\n";
-			$xml .= '</rsl>';
 
 			return $xml;
 		}
@@ -196,6 +268,19 @@ if ( ! class_exists( 'RSL_License' ) ) {
 				'contact_email',
 				'contact_url',
 				'terms_url',
+				'max_age',
+				'accepts_type',
+				'accepts_body',
+				'reporting_type',
+				'reporting_profile',
+				'reporting_endpoint',
+				'reporting_body',
+				'legal_attestation',
+				'legal_contact',
+				'legal_proof',
+				'alternate_type',
+				'alternate_url',
+				'schema_inline',
 				'active',
 				'updated_at',
 			);

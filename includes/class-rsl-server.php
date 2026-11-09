@@ -135,12 +135,19 @@ class RSL_Server {
 			'index.php?rsl_wellknown=1',
 			'top'
 		);
+
+		add_rewrite_rule(
+			'^rsl\.xml$',
+			'index.php?rsl_document=1',
+			'top'
+		);
 	}
 
 	public function add_query_vars( $vars ) {
 		$vars[] = 'rsl_license_id';
 		$vars[] = 'rsl_feed';
 		$vars[] = 'rsl_wellknown';
+		$vars[] = 'rsl_document';
 		return $vars;
 	}
 
@@ -162,6 +169,12 @@ class RSL_Server {
 		// Handle .well-known/rsl discovery
 		if ( get_query_var( 'rsl_wellknown' ) ) {
 			$this->serve_wellknown_rsl();
+			exit;
+		}
+
+		// Handle the site-wide RSL document
+		if ( get_query_var( 'rsl_document' ) ) {
+			$this->serve_rsl_document();
 			exit;
 		}
 	}
@@ -277,6 +290,21 @@ class RSL_Server {
 		$rsl_rss->rsl_feed_template();
 	}
 
+	private function serve_rsl_document() {
+		$licenses = $this->license_handler->get_licenses( array( 'active' => 1 ) );
+
+		if ( empty( $licenses ) ) {
+			status_header( 404 );
+			exit;
+		}
+
+		header( 'Content-Type: application/rsl+xml; charset=UTF-8' );
+		header( 'Cache-Control: public, max-age=3600' );
+		$this->add_cors_headers();
+
+		self::send_rsl_xml( $this->license_handler->generate_rsl_document( $licenses ) );
+	}
+
 	private function serve_wellknown_rsl() {
 		$site_info = array(
 			'site_name'      => get_bloginfo( 'name' ),
@@ -290,6 +318,7 @@ class RSL_Server {
 			),
 			'endpoints'      => array(
 				'license_xml' => home_url( 'rsl-license/{id}/' ),
+				'document'    => home_url( 'rsl.xml' ),
 				'wellknown'   => home_url( '.well-known/rsl/' ),
 			),
 		);

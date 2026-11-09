@@ -523,6 +523,9 @@ RSL server discovery endpoint.
 }
 ```
 
+### `GET /rsl.xml`
+Site-wide RSL document containing every active license. Licenses that share a `content_url` are grouped into one `<content>` with multiple `<license>` children, so tiered terms such as free search indexing and paid AI training appear together.
+
 ### `GET /rsl-license/{id}/`
 Individual license XML output.
 
@@ -531,18 +534,19 @@ The response carries a strong `ETag` whose value is the quoted SHA-256 hex diges
 **Response:**
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<rsl xmlns="https://rslstandard.org/rsl">
-  <content url="/">
+<rsl xmlns="https://rslstandard.org/rsl" max-age="30">
+  <content url="/" server="https://example.com/wp-json/rsl-olp/v1">
     <license>
-      <permits type="usage">train-ai</permits>
+      <permits type="usage">ai-train</permits>
       <payment type="purchase">
         <amount currency="USD">499.00</amount>
       </payment>
-      <server url="https://example.com/wp-json/rsl-olp/v1"/>
     </license>
   </content>
 </rsl>
 ```
+
+License rows also support `accepts_type`/`accepts_body`, `reporting_type`/`reporting_profile`/`reporting_endpoint`/`reporting_body`, `legal_attestation`/`legal_contact`/`legal_proof`, `alternate_type`/`alternate_url`, and `schema_inline` for RSL 1.0 payment, reporting, legal, alternate, and inline JSON-LD metadata.
 
 ### `GET /feed/rsl-licenses/`
 RSS feed of all licenses.

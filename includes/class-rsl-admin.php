@@ -575,10 +575,45 @@ class RSL_Admin {
 			'contact_url'      => isset( $_POST['contact_url'] )
 				? esc_url_raw( wp_unslash( $_POST['contact_url'] ) )
 				: '',
-			'terms_url'        => isset( $_POST['terms_url'] )
+			'terms_url'          => isset( $_POST['terms_url'] )
 				? esc_url_raw( wp_unslash( $_POST['terms_url'] ) )
 				: '',
-			'active'           => isset( $_POST['active'] ) ? 1 : 0,
+			'max_age'            => isset( $_POST['max_age'] ) ? intval( $_POST['max_age'] ) : 30,
+			'accepts_type'       => isset( $_POST['accepts_type'] )
+				? sanitize_text_field( wp_unslash( $_POST['accepts_type'] ) )
+				: '',
+			'accepts_body'       => isset( $_POST['accepts_body'] )
+				? sanitize_textarea_field( wp_unslash( $_POST['accepts_body'] ) )
+				: '',
+			'reporting_type'     => isset( $_POST['reporting_type'] )
+				? sanitize_text_field( wp_unslash( $_POST['reporting_type'] ) )
+				: '',
+			'reporting_profile'  => isset( $_POST['reporting_profile'] )
+				? sanitize_text_field( wp_unslash( $_POST['reporting_profile'] ) )
+				: '',
+			'reporting_endpoint' => isset( $_POST['reporting_endpoint'] )
+				? sanitize_text_field( wp_unslash( $_POST['reporting_endpoint'] ) )
+				: '',
+			'reporting_body'     => isset( $_POST['reporting_body'] )
+				? sanitize_textarea_field( wp_unslash( $_POST['reporting_body'] ) )
+				: '',
+			'legal_attestation'  => isset( $_POST['legal_attestation'] ) ? 1 : 0,
+			'legal_contact'      => isset( $_POST['legal_contact'] )
+				? sanitize_text_field( wp_unslash( $_POST['legal_contact'] ) )
+				: '',
+			'legal_proof'        => isset( $_POST['legal_proof'] )
+				? sanitize_textarea_field( wp_unslash( $_POST['legal_proof'] ) )
+				: '',
+			'alternate_type'     => isset( $_POST['alternate_type'] )
+				? sanitize_text_field( wp_unslash( $_POST['alternate_type'] ) )
+				: '',
+			'alternate_url'      => isset( $_POST['alternate_url'] )
+				? sanitize_text_field( wp_unslash( $_POST['alternate_url'] ) )
+				: '',
+			'schema_inline'      => isset( $_POST['schema_inline'] )
+				? sanitize_textarea_field( wp_unslash( $_POST['schema_inline'] ) )
+				: '',
+			'active'             => isset( $_POST['active'] ) ? 1 : 0,
 		);
 
 		if (
