@@ -163,13 +163,6 @@ class RSL_Admin {
 				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
 			)
 		);
-		register_setting(
-			'rsl_settings',
-			'rsl_default_namespace',
-			array(
-				'sanitize_callback' => 'esc_url_raw',
-			)
-		);
 	}
 
 	public function sanitize_checkbox( $value ) {
@@ -395,6 +388,19 @@ class RSL_Admin {
 			return;
 		}
 
+		$encrypted = isset( $_POST['encrypted'] ) ? 1 : 0;
+		if ( $encrypted && empty( $server_url ) ) {
+			wp_send_json_error(
+				array(
+					'message' => __(
+						'Content encryption requires an external license server that implements the Encrypted Media Standard (EMS).',
+						'rsl-wp'
+					),
+				)
+			);
+			return;
+		}
+
 		// Validate amount
 		$amount = isset( $_POST['amount'] ) ? floatval( $_POST['amount'] ) : 0;
 		if ( $amount < 0 || $amount > 999999.99 ) {
@@ -506,16 +512,7 @@ class RSL_Admin {
 		}
 
 		// Validate payment type
-		$allowed_payment_types = array(
-			'free',
-			'purchase',
-			'subscription',
-			'training',
-			'crawl',
-			'inference',
-			'attribution',
-			'royalty',
-		);
+		$allowed_payment_types = RSL_License::PAYMENT_TYPES;
 		$payment_type          = isset( $_POST['payment_type'] )
 			? sanitize_text_field( wp_unslash( $_POST['payment_type'] ) )
 			: 'free';
@@ -530,8 +527,8 @@ class RSL_Admin {
 				: '',
 			'content_url'      => $content_url,
 			'server_url'       => $server_url,
-			'encrypted'        => isset( $_POST['encrypted'] ) ? 1 : 0,
-			'lastmod'          => current_time( 'mysql' ),
+			'encrypted'        => $encrypted,
+			'lastmod'          => current_time( 'mysql', true ),
 			'permits_usage'    => isset( $_POST['permits_usage'] )
 				? sanitize_text_field( wp_unslash( $_POST['permits_usage'] ) )
 				: '',

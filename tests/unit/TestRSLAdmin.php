@@ -483,7 +483,6 @@ class TestRSLAdmin extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->admin );
 		$method     = $reflection->getMethod( 'get_menu_icon' );
-		$method->setAccessible( true );
 
 		$icon = $method->invoke( $this->admin );
 

@@ -31,11 +31,17 @@ if ( ! function_exists( 'rsl_log' ) ) {
 }
 
 define( 'RSL_PLUGIN_VERSION', '0.0.5' );
+define( 'RSL_NAMESPACE', 'https://rslstandard.org/rsl' );
 define( 'RSL_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'RSL_PLUGIN_PATH', plugin_dir_path( __FILE__ ) );
 define( 'RSL_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 
 class RSL_Licensing {
+
+	/**
+	 * Schema/data version used to gate one-time migrations.
+	 */
+	const DB_VERSION = '1';
 
 	private static $instance = null;
 
@@ -57,6 +63,7 @@ class RSL_Licensing {
 
 	public function init() {
 		$this->includes();
+		$this->maybe_upgrade();
 		$this->init_hooks();
 	}
 
@@ -99,7 +106,7 @@ class RSL_Licensing {
 		new RSL_Robots();
 		new RSL_RSS();
 		new RSL_Media();
-		new RSL_Server();
+		RSL_Server::get_instance();
 
 		// Initialize WordPress Abilities API integration
 		if ( function_exists( 'wp_register_ability' ) ) {
@@ -130,6 +137,67 @@ class RSL_Licensing {
 
 	public function deactivate() {
 		flush_rewrite_rules();
+	}
+
+	/**
+	 * Run one-time data migrations when the stored version is behind.
+	 */
+	public function maybe_upgrade() {
+		if ( get_option( 'rsl_db_version' ) === self::DB_VERSION ) {
+			return;
+		}
+
+		global $wpdb;
+
+		// The namespace is fixed by RSL 1.0 and no longer configurable.
+		delete_option( 'rsl_default_namespace' );
+
+		$table = $wpdb->prefix . 'rsl_licenses';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results( "SELECT * FROM {$table}", ARRAY_A );
+
+		if ( is_array( $rows ) ) {
+			foreach ( $rows as $row ) {
+				$updates = array();
+				$formats = array();
+
+				foreach ( RSL_License::TOKEN_LIST_FIELDS as $field ) {
+					if ( isset( $row[ $field ] ) ) {
+						$normalized = RSL_License::normalize_token_list(
+							$row[ $field ],
+							in_array( $field, RSL_License::USAGE_LIST_FIELDS, true )
+						);
+						if ( $normalized !== $row[ $field ] ) {
+							$updates[ $field ] = $normalized;
+							$formats[]         = '%s';
+						}
+					}
+				}
+
+				if ( isset( $row['payment_type'] ) ) {
+					$normalized = RSL_License::normalize_payment_type( $row['payment_type'] );
+					if ( $normalized !== $row['payment_type'] ) {
+						$updates['payment_type'] = $normalized;
+						$formats[]               = '%s';
+					}
+				}
+
+				if ( ! empty( $row['lastmod'] ) ) {
+					$gmt = get_gmt_from_date( $row['lastmod'] );
+					if ( $gmt && $gmt !== $row['lastmod'] ) {
+						$updates['lastmod'] = $gmt;
+						$formats[]          = '%s';
+					}
+				}
+
+				if ( $updates ) {
+					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+					$wpdb->update( $table, $updates, array( 'id' => intval( $row['id'] ) ), $formats, array( '%d' ) );
+				}
+			}
+		}
+
+		update_option( 'rsl_db_version', self::DB_VERSION );
 	}
 
 	public function add_plugin_action_links( $links ) {

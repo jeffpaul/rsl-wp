@@ -127,7 +127,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 							<?php esc_html_e( 'Content is encrypted', 'rsl-wp' ); ?>
 						</label>
 						<p class="description">
-							<?php esc_html_e( 'Check if the licensed content requires decryption keys from the license server.', 'rsl-wp' ); ?>
+							<?php esc_html_e( 'Only enable when the content is encrypted and served by an external license server that implements the RSL Encrypted Media Standard (EMS). The built-in server does not deliver decryption keys.', 'rsl-wp' ); ?>
 						</p>
 					</td>
 				</tr>
@@ -145,7 +145,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 					<td>
 						<select id="permits_usage" name="permits_usage" multiple class="rsl-multiselect">
 							<?php
-							$selected_usage = explode( ',', $license_data['permits_usage'] ?? '' );
+							$selected_usage = RSL_License::split_token_list( $license_data['permits_usage'] ?? '' );
 							foreach ( $license_handler->get_usage_options() as $value => $label ) :
 								?>
 								<option value="<?php echo esc_attr( $value ); ?>" 
@@ -167,7 +167,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 					<td>
 						<select id="permits_user" name="permits_user" multiple class="rsl-multiselect">
 							<?php
-							$selected_user = explode( ',', $license_data['permits_user'] ?? '' );
+							$selected_user = RSL_License::split_token_list( $license_data['permits_user'] ?? '' );
 							foreach ( $license_handler->get_user_options() as $value => $label ) :
 								?>
 								<option value="<?php echo esc_attr( $value ); ?>" 
@@ -209,7 +209,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 					<td>
 						<select id="prohibits_usage" name="prohibits_usage" multiple class="rsl-multiselect">
 							<?php
-							$selected_prohibited = explode( ',', $license_data['prohibits_usage'] ?? '' );
+							$selected_prohibited = RSL_License::split_token_list( $license_data['prohibits_usage'] ?? '' );
 							foreach ( $license_handler->get_usage_options() as $value => $label ) :
 								?>
 								<option value="<?php echo esc_attr( $value ); ?>" 
@@ -231,7 +231,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 					<td>
 						<select id="prohibits_user" name="prohibits_user" multiple class="rsl-multiselect">
 							<?php
-							$selected_prohibited_user = explode( ',', $license_data['prohibits_user'] ?? '' );
+							$selected_prohibited_user = RSL_License::split_token_list( $license_data['prohibits_user'] ?? '' );
 							foreach ( $license_handler->get_user_options() as $value => $label ) :
 								?>
 								<option value="<?php echo esc_attr( $value ); ?>" 
@@ -353,7 +353,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 					<td>
 						<select id="warranty" name="warranty" multiple class="rsl-multiselect">
 							<?php
-							$selected_warranty = explode( ',', $license_data['warranty'] ?? '' );
+							$selected_warranty = RSL_License::split_token_list( $license_data['warranty'] ?? '' );
 							foreach ( $license_handler->get_warranty_options() as $value => $label ) :
 								?>
 								<option value="<?php echo esc_attr( $value ); ?>" 
@@ -375,7 +375,7 @@ $page_title      = $is_edit ? __( 'Edit License', 'rsl-wp' ) : __( 'Add New Lice
 					<td>
 						<select id="disclaimer" name="disclaimer" multiple class="rsl-multiselect">
 							<?php
-							$selected_disclaimer = explode( ',', $license_data['disclaimer'] ?? '' );
+							$selected_disclaimer = RSL_License::split_token_list( $license_data['disclaimer'] ?? '' );
 							foreach ( $license_handler->get_disclaimer_options() as $value => $label ) :
 								?>
 								<option value="<?php echo esc_attr( $value ); ?>" 

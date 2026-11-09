@@ -22,6 +22,45 @@ if ( ! defined( 'ABSPATH' ) ) {
 class RSL_License {
 
 	/**
+	 * RSL 1.0 usage vocabulary tokens.
+	 */
+	const USAGE_TOKENS = array( 'all', 'ai-all', 'ai-train', 'ai-input', 'ai-index', 'search' );
+
+	/**
+	 * RSL 1.0 payment type vocabulary.
+	 */
+	const PAYMENT_TYPES = array( 'free', 'purchase', 'subscription', 'training', 'crawl', 'use', 'contribution', 'attribution' );
+
+	/**
+	 * Legacy token aliases mapped to their RSL 1.0 equivalents.
+	 */
+	const LEGACY_USAGE_TOKENS = array(
+		'train-ai'     => 'ai-train',
+		'train-genai'  => 'ai-train',
+		'ai-use'       => 'ai-input',
+		'ai-summarize' => 'ai-input',
+	);
+
+	/**
+	 * Fields holding space-separated RSL token lists.
+	 */
+	const TOKEN_LIST_FIELDS = array(
+		'permits_usage',
+		'permits_user',
+		'permits_geo',
+		'prohibits_usage',
+		'prohibits_user',
+		'prohibits_geo',
+		'warranty',
+		'disclaimer',
+	);
+
+	/**
+	 * Fields that use the controlled RSL usage vocabulary.
+	 */
+	const USAGE_LIST_FIELDS = array( 'permits_usage', 'prohibits_usage' );
+
+	/**
 	 * Database table name for storing licenses.
 	 *
 	 * @var string
@@ -91,7 +130,7 @@ class RSL_License {
 			'content_url'      => '',
 			'server_url'       => '',
 			'encrypted'        => 0,
-			'lastmod'          => current_time( 'mysql' ),
+			'lastmod'          => current_time( 'mysql', true ),
 			'permits_usage'    => '',
 			'permits_user'     => '',
 			'permits_geo'      => '',
@@ -406,8 +445,7 @@ class RSL_License {
 					break;
 
 				case 'payment_type':
-					$value        = sanitize_text_field( $value );
-					$data[ $key ] = array_key_exists( $value, $this->get_payment_options() ) ? $value : 'free';
+					$data[ $key ] = self::normalize_payment_type( sanitize_text_field( $value ) );
 					break;
 
 				case 'contact_email':
@@ -415,9 +453,13 @@ class RSL_License {
 					break;
 
 				default:
-					$data[ $key ] = in_array( $key, $url_fields, true )
-						? esc_url_raw( $value )
-						: sanitize_text_field( $value );
+					if ( in_array( $key, self::TOKEN_LIST_FIELDS, true ) ) {
+						$data[ $key ] = self::normalize_token_list( $value, in_array( $key, self::USAGE_LIST_FIELDS, true ) );
+					} else {
+						$data[ $key ] = in_array( $key, $url_fields, true )
+							? esc_url_raw( $value )
+							: sanitize_text_field( $value );
+					}
 					break;
 			}
 		}
@@ -476,11 +518,21 @@ class RSL_License {
 	 */
 	public function generate_rsl_xml( $license_data, $options = array() ) {
 		$defaults = array(
-			'namespace'  => 'https://rslstandard.org/rsl',
+			'namespace'  => defined( 'RSL_NAMESPACE' ) ? RSL_NAMESPACE : 'https://rslstandard.org/rsl',
 			'standalone' => true,
+			'root'       => true,
+			'prefix'     => '',
 		);
 
 		$options = wp_parse_args( $options, $defaults );
+
+		foreach ( self::TOKEN_LIST_FIELDS as $field ) {
+			$license_data[ $field ] = self::normalize_token_list(
+				$license_data[ $field ] ?? '',
+				in_array( $field, self::USAGE_LIST_FIELDS, true )
+			);
+		}
+		$license_data['payment_type'] = self::normalize_payment_type( $license_data['payment_type'] ?? 'free' );
 
 		$xml = '';
 
@@ -488,19 +540,35 @@ class RSL_License {
 			$xml .= '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
 		}
 
-		$xml .= '<rsl xmlns="' . esc_attr( $options['namespace'] ) . '">' . "\n";
+		if ( $options['root'] ) {
+			$xml .= '<rsl xmlns="' . esc_attr( $options['namespace'] ) . '">' . "\n";
+		}
 		$xml .= '  <content url="' . esc_attr( $license_data['content_url'] ) . '"';
 
-		if ( ! empty( $license_data['server_url'] ) ) {
-			$xml .= ' server="' . esc_attr( $license_data['server_url'] ) . '"';
+		$server_url = ! empty( $license_data['server_url'] ) ? $license_data['server_url'] : '';
+		if ( '' === $server_url ) {
+			/**
+			 * Filter the server advertised for licenses that use the built-in
+			 * license server. Return an empty string to advertise no server.
+			 *
+			 * @param string $server_url   Built-in OLP base URL.
+			 * @param array  $license_data License data.
+			 */
+			$server_url = apply_filters( 'rsl_builtin_server_url', rest_url( 'rsl-olp/v1' ), $license_data );
 		}
 
-		if ( ! empty( $license_data['encrypted'] ) && 1 === $license_data['encrypted'] ) {
+		if ( ! empty( $server_url ) ) {
+			$xml .= ' server="' . esc_attr( $server_url ) . '"';
+		}
+
+		// The built-in server does not implement EMS yet, so only external
+		// servers may advertise encrypted content.
+		if ( (int) $license_data['encrypted'] === 1 && ! empty( $license_data['server_url'] ) ) {
 			$xml .= ' encrypted="true"';
 		}
 
 		if ( ! empty( $license_data['lastmod'] ) ) {
-			$xml .= ' lastmod="' . esc_attr( gmdate( 'c', strtotime( $license_data['lastmod'] ) ) ) . '"';
+			$xml .= ' lastmod="' . esc_attr( gmdate( 'c', strtotime( $license_data['lastmod'] . ' UTC' ) ) ) . '"';
 		}
 
 		$xml .= '>' . "\n";
@@ -584,9 +652,80 @@ class RSL_License {
 
 		$xml .= '    </license>' . "\n";
 		$xml .= '  </content>' . "\n";
-		$xml .= '</rsl>';
+		if ( $options['root'] ) {
+			$xml .= '</rsl>';
+		}
+
+		if ( ! empty( $options['prefix'] ) ) {
+			$tags = 'content|schema|copyright|terms|license|permits|prohibits|payment|standard|custom|amount|legal';
+			$xml  = preg_replace(
+				'/<(\/?)(' . $tags . ')(\s|>|\/)/',
+				'<$1' . preg_quote( $options['prefix'], '/' ) . '$2$3',
+				$xml
+			);
+		}
 
 		return $xml;
+	}
+
+	/**
+	 * Normalize a payment type to the RSL 1.0 vocabulary.
+	 *
+	 * @param string $value Stored payment type.
+	 * @return string
+	 */
+	public static function normalize_payment_type( $value ) {
+		$value = strtolower( trim( (string) $value ) );
+
+		if ( 'inference' === $value || 'royalty' === $value ) {
+			$value = 'use';
+		}
+
+		return in_array( $value, self::PAYMENT_TYPES, true ) ? $value : 'free';
+	}
+
+	/**
+	 * Normalize a token list to the RSL 1.0 space-separated form.
+	 *
+	 * Accepts arrays, comma-separated legacy values and mixed whitespace.
+	 * Legacy draft-era usage tokens are mapped to their 1.0 equivalents.
+	 *
+	 * @param string|array $value      Raw token list.
+	 * @param bool         $map_legacy Map legacy draft-era usage tokens to 1.0.
+	 * @return string Space-separated tokens.
+	 */
+	public static function normalize_token_list( $value, $map_legacy = false ) {
+		$tokens = is_array( $value ) ? $value : preg_split( '/[\s,]+/', (string) $value, -1, PREG_SPLIT_NO_EMPTY );
+		$out    = array();
+
+		foreach ( (array) $tokens as $token ) {
+			$token = trim( (string) $token );
+			if ( '' === $token ) {
+				continue;
+			}
+			if ( $map_legacy ) {
+				$token = strtolower( $token );
+				if ( isset( self::LEGACY_USAGE_TOKENS[ $token ] ) ) {
+					$token = self::LEGACY_USAGE_TOKENS[ $token ];
+				}
+			}
+			if ( ! in_array( $token, $out, true ) ) {
+				$out[] = $token;
+			}
+		}
+
+		return implode( ' ', $out );
+	}
+
+	/**
+	 * Split a stored token list into an array.
+	 *
+	 * @param string|array $value Stored value.
+	 * @return string[]
+	 */
+	public static function split_token_list( $value ) {
+		$normalized = self::normalize_token_list( $value );
+		return '' === $normalized ? array() : explode( ' ', $normalized );
 	}
 
 	/**
@@ -596,12 +735,12 @@ class RSL_License {
 	 */
 	public function get_usage_options() {
 		return array(
-			'all'          => __( 'All automated processing', 'rsl-wp' ),
-			'train-ai'     => __( 'Train AI model', 'rsl-wp' ),
-			'train-genai'  => __( 'Train generative AI model', 'rsl-wp' ),
-			'ai-use'       => __( 'Use as AI input (RAG)', 'rsl-wp' ),
-			'ai-summarize' => __( 'AI summarization', 'rsl-wp' ),
-			'search'       => __( 'Search indexing', 'rsl-wp' ),
+			'all'      => __( 'All automated processing', 'rsl-wp' ),
+			'ai-all'   => __( 'All AI uses', 'rsl-wp' ),
+			'ai-train' => __( 'Train AI model', 'rsl-wp' ),
+			'ai-input' => __( 'Use as AI input (RAG, summarization)', 'rsl-wp' ),
+			'ai-index' => __( 'Index for AI retrieval', 'rsl-wp' ),
+			'search'   => __( 'Search indexing', 'rsl-wp' ),
 		);
 	}
 
@@ -632,9 +771,9 @@ class RSL_License {
 			'subscription' => __( 'Subscription', 'rsl-wp' ),
 			'training'     => __( 'Per training use', 'rsl-wp' ),
 			'crawl'        => __( 'Per crawl', 'rsl-wp' ),
-			'inference'    => __( 'Per inference', 'rsl-wp' ),
+			'use'          => __( 'Per use', 'rsl-wp' ),
+			'contribution' => __( 'Contribution', 'rsl-wp' ),
 			'attribution'  => __( 'Attribution required', 'rsl-wp' ),
-			'royalty'      => __( 'Royalty', 'rsl-wp' ),
 		);
 	}
 

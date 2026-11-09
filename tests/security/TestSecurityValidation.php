@@ -156,7 +156,6 @@ class TestSecurityValidation extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'authenticate_oauth_client' );
-		$method->setAccessible( true );
 
 		foreach ( $injection_payloads as $payload ) {
 			$_SERVER['HTTP_AUTHORIZATION'] = $payload;
@@ -188,7 +187,6 @@ class TestSecurityValidation extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'jwt_decode_token' );
-		$method->setAccessible( true );
 
 		// Test various token manipulations
 		$manipulations = array(

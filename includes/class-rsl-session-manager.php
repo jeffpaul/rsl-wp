@@ -249,7 +249,7 @@ class RSL_Session_Manager {
 
 			case 'proof_ready':
 				$response['signed_proof'] = $session['proof'];
-				$response['message']      = 'Payment confirmed, use signed_proof to get token';
+				$response['message']      = 'Payment confirmed, redeem signed_proof once at /token with session_id';
 				break;
 
 			case 'completed':

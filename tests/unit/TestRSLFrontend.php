@@ -423,7 +423,6 @@ class TestRSLFrontend extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->frontend );
 		$method     = $reflection->getMethod( 'get_license_xml_url' );
-		$method->setAccessible( true );
 
 		$url = $method->invoke( $this->frontend, $license_id );
 
@@ -450,7 +449,6 @@ class TestRSLFrontend extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->frontend );
 		$method     = $reflection->getMethod( 'prepare_license_data' );
-		$method->setAccessible( true );
 
 		$prepared = $method->invoke( $this->frontend, $license_data, $post );
 
@@ -476,7 +474,6 @@ class TestRSLFrontend extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->frontend );
 		$method     = $reflection->getMethod( 'output_embedded_rsl' );
-		$method->setAccessible( true );
 
 		ob_start();
 		$method->invoke( $this->frontend, $license_data );

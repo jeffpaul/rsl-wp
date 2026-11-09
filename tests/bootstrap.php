@@ -7,6 +7,7 @@
 
 // Composer autoloader must be loaded first
 require_once dirname( __DIR__ ) . '/vendor/autoload.php';
+require_once __DIR__ . '/wp-stubs.php';
 
 // Load Brain Monkey for WordPress function mocking
 \Brain\Monkey\setUp();
@@ -195,11 +196,7 @@ if ( ! class_exists( 'WP_Error' ) ) {
 // Mock global $wpdb
 global $wpdb;
 if ( ! $wpdb ) {
-	$wpdb              = new stdClass();
-	$wpdb->prefix      = 'wp_';
-	$wpdb->last_error  = '';
-	$wpdb->insert_id   = 1;
-	$wpdb->num_queries = 0;
+	$wpdb = new WP_DB_Stub();
 }
 
 // Load mock classes for testing

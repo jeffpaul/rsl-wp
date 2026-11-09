@@ -62,55 +62,52 @@ class RSL_Robots {
 	}
 
 	private function get_license_xml_url( $license_id ) {
-		return add_query_arg( 'rsl_license', $license_id, home_url() );
+		return RSL_Server::get_license_url( $license_id );
 	}
 
 	private function get_rsl_feed_url() {
-		return add_query_arg( 'rsl_feed', '1', home_url() );
+		return RSL_Server::get_feed_url();
 	}
 
 	private function get_ai_preferences_from_license( $license_data ) {
 		$preferences = array();
 
 		// Convert RSL permits/prohibits to AI Preferences format
-		$prohibited_usage = ! empty( $license_data['prohibits_usage'] ) ?
-			explode( ',', $license_data['prohibits_usage'] ) : array();
+		$prohibited_usage = RSL_License::split_token_list( $license_data['prohibits_usage'] ?? '' );
+		$permitted_usage  = RSL_License::split_token_list( $license_data['permits_usage'] ?? '' );
 
-		$permitted_usage = ! empty( $license_data['permits_usage'] ) ?
-			explode( ',', $license_data['permits_usage'] ) : array();
-
-		// Default AI preference mappings
+		// RSL 1.0 usage tokens mapped to AI Preferences tokens.
 		$ai_preference_map = array(
-			'train-ai'     => 'train-ai',
-			'train-genai'  => 'train-ai', // Map to generic train-ai
-			'ai-use'       => 'ai-use',
-			'ai-summarize' => 'ai-summarize',
-			'search'       => 'search',
+			'ai-all'   => array( 'train-ai', 'ai-use', 'ai-summarize' ),
+			'ai-train' => array( 'train-ai' ),
+			'ai-input' => array( 'ai-use', 'ai-summarize' ),
+			'ai-index' => array( 'ai-use' ),
+			'search'   => array( 'search' ),
 		);
 
 		// If specific usage is prohibited, set to 'n'
 		foreach ( $prohibited_usage as $usage ) {
-			$usage = trim( $usage );
 			if ( isset( $ai_preference_map[ $usage ] ) ) {
-				$preferences[] = $ai_preference_map[ $usage ] . '=n';
+				foreach ( $ai_preference_map[ $usage ] as $pref ) {
+					$preferences[] = $pref . '=n';
+				}
 			}
 		}
 
-		// If 'all' is prohibited, set all to 'n'
-		if ( in_array( 'all', $prohibited_usage ) ) {
+		// If 'all' or 'ai-all' is prohibited, set all to 'n'
+		if ( in_array( 'all', $prohibited_usage, true ) ) {
 			$preferences = array( 'train-ai=n', 'ai-use=n', 'ai-summarize=n', 'search=n' );
 		}
 
 		// If only specific usage is permitted (and others are implicitly prohibited)
-		if ( ! empty( $permitted_usage ) && ! in_array( 'all', $permitted_usage ) ) {
+		if ( ! empty( $permitted_usage ) && ! in_array( 'all', $permitted_usage, true ) ) {
 			$all_usage_types       = array_keys( $ai_preference_map );
 			$implicitly_prohibited = array_diff( $all_usage_types, $permitted_usage );
 
 			foreach ( $implicitly_prohibited as $usage ) {
 				if ( isset( $ai_preference_map[ $usage ] ) ) {
-					$pref = $ai_preference_map[ $usage ] . '=n';
-					if ( ! in_array( $pref, $preferences ) ) {
-						$preferences[] = $pref;
+					foreach ( $ai_preference_map[ $usage ] as $pref ) {
+						$preferences[] = $pref . '=n';
 					}
 				}
 			}

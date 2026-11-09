@@ -124,6 +124,51 @@ add_filter('rsl_token_ttl', function($ttl) {
 });
 ```
 
+#### `rsl_license_url`
+Filter the public URL for a single RSL license document (default: `rsl-license/{id}/` with pretty permalinks, or `?rsl_license_id={id}`):
+
+```php
+add_filter('rsl_license_url', function($url, $license_id) {
+    return home_url('/licenses/' . $license_id . '.xml');
+}, 10, 2);
+```
+
+#### `rsl_feed_url`
+Filter the public URL for the RSL license catalogue feed:
+
+```php
+add_filter('rsl_feed_url', function($url) {
+    return home_url('/rsl-feed.xml');
+});
+```
+
+#### `rsl_require_client_auth`
+Require OAuth client authentication on every `/token` request (default `true`, per RSL 1.0). Return `false` only for backwards compatibility with integrations that relied on unauthenticated token requests:
+
+```php
+add_filter('rsl_require_client_auth', function($required, $license, $request) {
+    return $required;
+}, 10, 3);
+```
+
+#### `rsl_builtin_server_url`
+URL advertised in the `server` attribute for licenses served by the built-in OLP server (default: `rest_url('rsl-olp/v1')`). Return an empty string to advertise no server:
+
+```php
+add_filter('rsl_builtin_server_url', function($url, $license_data) {
+    return 'https://licenses.example.com/olp';
+}, 10, 2);
+```
+
+#### `rsl_enable_builtin_cap`
+Whether the built-in server issues CAP license challenges for licenses it serves (default `true`). When disabled, requests are handled without a CAP gate:
+
+```php
+add_filter('rsl_enable_builtin_cap', function($enabled) {
+    return false;
+});
+```
+
 #### `rsl_verify_order_client`
 Decide whether a WooCommerce order or subscription can be redeemed for a token by the authenticated OAuth client. By default only the client recorded at the token endpoint's checkout can redeem it, so orders created any other way are rejected:
 

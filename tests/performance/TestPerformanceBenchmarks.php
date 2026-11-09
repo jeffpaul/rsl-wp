@@ -231,7 +231,6 @@ class TestPerformanceBenchmarks extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'jwt_encode_payload' );
-		$method->setAccessible( true );
 
 		$iterations = 1000;
 		$total_time = 0;
@@ -278,7 +277,6 @@ class TestPerformanceBenchmarks extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'jwt_decode_token' );
-		$method->setAccessible( true );
 
 		$iterations = 1000;
 		$total_time = 0;
@@ -653,7 +651,6 @@ class TestPerformanceBenchmarks extends TestCase {
 					);
 					$reflection = new \ReflectionClass( $this->server );
 					$method     = $reflection->getMethod( 'jwt_encode_payload' );
-					$method->setAccessible( true );
 					$method->invoke( $this->server, $payload );
 					break;
 
@@ -661,7 +658,6 @@ class TestPerformanceBenchmarks extends TestCase {
 					$token      = $this->generate_test_jwt( array( 'sub' => 'test' ) );
 					$reflection = new \ReflectionClass( $this->server );
 					$method     = $reflection->getMethod( 'jwt_decode_token' );
-					$method->setAccessible( true );
 					$method->invoke( $this->server, $token );
 					break;
 

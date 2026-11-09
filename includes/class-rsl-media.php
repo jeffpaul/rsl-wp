@@ -301,7 +301,7 @@ class RSL_Media {
 	}
 
 	private function get_license_xml_url( $license_id ) {
-		return add_query_arg( 'rsl_license', $license_id, home_url() );
+		return RSL_Server::get_license_url( $license_id );
 	}
 
 	public function get_media_rsl_info( $attachment_id ) {

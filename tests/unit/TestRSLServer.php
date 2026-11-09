@@ -79,7 +79,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'jwt_encode_payload' );
-		$method->setAccessible( true );
 
 		$token = $method->invoke( $this->server, $payload );
 
@@ -111,7 +110,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'jwt_decode_token' );
-		$method->setAccessible( true );
 
 		$decoded_payload = $method->invoke( $this->server, $token );
 
@@ -130,7 +128,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'jwt_decode_token' );
-		$method->setAccessible( true );
 
 		// Invalid token format
 		$result = $method->invoke( $this->server, 'invalid.token' );
@@ -173,7 +170,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'validate_license_token' );
-		$method->setAccessible( true );
 
 		$gated = array( array( 'id' => 1 ) );
 
@@ -224,7 +220,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'validate_license_token' );
-		$method->setAccessible( true );
 
 		$result = $method->invoke( $this->server, $token );
 		$this->assertFalse( $result );
@@ -239,7 +234,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'url_matches_pattern' );
-		$method->setAccessible( true );
 
 		// Exact match
 		$result = $method->invoke( $this->server, '/exact-path', '/exact-path' );
@@ -271,7 +265,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'is_free_license' );
-		$method->setAccessible( true );
 
 		// Zero amount
 		$license = array(
@@ -332,7 +325,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'mint_token_for_license' );
-		$method->setAccessible( true );
 
 		$result = $method->invoke( $this->server, $license, 'test-client' );
 
@@ -367,7 +359,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'authenticate_oauth_client' );
-		$method->setAccessible( true );
 
 		$result = $method->invoke( $this->server, $request );
 
@@ -392,7 +383,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'authenticate_oauth_client' );
-		$method->setAccessible( true );
 
 		$result = $method->invoke( $this->server, $request );
 
@@ -414,7 +404,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'authenticate_oauth_client' );
-		$method->setAccessible( true );
 
 		$result = $method->invoke( $this->server, $request );
 
@@ -641,7 +630,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'is_crawler_request' );
-		$method->setAccessible( true );
 
 		// Known crawler user agents
 		$crawler_uas = array(
@@ -714,7 +702,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'add_cors_headers' );
-		$method->setAccessible( true );
 
 		// Mock allowed origin
 		$_SERVER['HTTP_ORIGIN'] = 'http://example.org';
@@ -757,7 +744,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'get_jwt_secret' );
-		$method->setAccessible( true );
 
 		$secret1 = $method->invoke( $this->server );
 		$secret2 = $method->invoke( $this->server );
@@ -776,7 +762,6 @@ class TestRSLServer extends TestCase {
 		// Use reflection to access private method
 		$reflection = new \ReflectionClass( $this->server );
 		$method     = $reflection->getMethod( 'get_jwt_ttl' );
-		$method->setAccessible( true );
 
 		$ttl = $method->invoke( $this->server );
 

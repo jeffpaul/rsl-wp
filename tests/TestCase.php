@@ -79,7 +79,14 @@ class TestCase extends PHPUnit_TestCase {
 		};
 
 		$wpdb->get_results = function ( $query, $output = OBJECT ) {
-			return array( $this->get_row( $query, $output ) );
+			$mock_data = array(
+				'id'           => 1,
+				'name'         => 'Test License',
+				'content_url'  => '/test',
+				'payment_type' => 'free',
+				'active'       => 1,
+			);
+			return array( $output === ARRAY_A ? $mock_data : (object) $mock_data );
 		};
 
 		$wpdb->update = function ( $table, $data, $where ) {
