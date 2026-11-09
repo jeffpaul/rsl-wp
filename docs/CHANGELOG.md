@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RSL documents emit a `max-age` attribute (default 30 days) and omit `reporting` until both a category and profile are configured.
 
 ### Fixed
+- RSS feed setting now disables both standard-feed annotations and the dedicated license feed; per-post RSS overrides are retained only when same-origin.
 - Media RSL metadata now uses the attachment URL, emits a valid `<rsl:rsl>` XMP fragment, embeds XMP directly in JPEGs when possible, and labels sidecar files as sidecars instead of claiming every file is embedded.
 - License edit links are nonce-protected.
 - Public discovery URLs no longer require a nonce.

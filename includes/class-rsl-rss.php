@@ -49,6 +49,10 @@ class RSL_RSS {
 	}
 
 	public function add_rsl_feed() {
+		if ( ! get_option( 'rsl_enable_rss_feed', 1 ) ) {
+			return;
+		}
+
 		add_feed( 'rsl-licenses', array( $this, 'rsl_feed_template' ) );
 	}
 
@@ -58,6 +62,11 @@ class RSL_RSS {
 	}
 
 	public function rsl_feed_template() {
+		if ( ! get_option( 'rsl_enable_rss_feed', 1 ) ) {
+			status_header( 404 );
+			return;
+		}
+
 		$licenses = $this->license_handler->get_licenses( array( 'active' => 1 ) );
 
 		header( 'Content-Type: application/rss+xml; charset=UTF-8' );
@@ -131,8 +140,7 @@ class RSL_RSS {
 
 	private function output_rss_rsl_content( $license_data, $post = null ) {
 		if ( $post ) {
-			// A feed item describes one post, so anchor its RSL block to that item.
-			$license_data['content_url'] = get_permalink( $post->ID );
+			$license_data['content_url'] = $this->get_post_content_url_for_rss( $license_data, $post );
 		}
 
 		$xml = $this->license_handler->generate_rsl_xml(
@@ -147,6 +155,49 @@ class RSL_RSS {
 		echo $xml; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- generator escapes values.
 	}
 
+	/**
+	 * Use post-specific content URL overrides only when they remain on this site's origin.
+	 *
+	 * @param array  $license_data License data prepared for this post.
+	 * @param object $post         Feed post.
+	 * @return string Same-origin content URL.
+	 */
+	private function get_post_content_url_for_rss( $license_data, $post ) {
+		$content_url = isset( $license_data['content_url'] ) ? trim( $license_data['content_url'] ) : '';
+		$permalink   = get_permalink( $post->ID );
+
+		if ( '' === $content_url ) {
+			return $permalink;
+		}
+
+		$site_origin    = wp_parse_url( home_url( '/' ) );
+		$content_origin = wp_parse_url( $content_url );
+
+		if ( ! is_array( $site_origin ) || ! is_array( $content_origin ) ) {
+			return $permalink;
+		}
+
+		// Root-relative URLs are same-origin; other relative forms can resolve against a feed path.
+		if ( ! isset( $content_origin['host'] ) && ! isset( $content_origin['scheme'] ) ) {
+			return 0 === strpos( $content_url, '/' ) && 0 !== strpos( $content_url, '//' )
+				? $content_url
+				: $permalink;
+		}
+
+		$site_scheme    = strtolower( $site_origin['scheme'] ?? '' );
+		$content_scheme = strtolower( $content_origin['scheme'] ?? $site_scheme );
+		$site_host      = strtolower( $site_origin['host'] ?? '' );
+		$content_host   = strtolower( $content_origin['host'] ?? '' );
+		$site_port      = $site_origin['port'] ?? ( 'https' === $site_scheme ? 443 : 80 );
+		$content_port   = $content_origin['port'] ?? ( 'https' === $content_scheme ? 443 : 80 );
+
+		if ( $site_scheme !== $content_scheme || $site_host !== $content_host || $site_port !== $content_port ) {
+			return $permalink;
+		}
+
+		return $content_url;
+	}
+
 	private function get_license_xml_url( $license_id ) {
 		return RSL_Server::get_license_url( $license_id );
 	}
@@ -154,6 +205,4 @@ class RSL_RSS {
 	public function get_rsl_feed_url() {
 		return RSL_Server::get_feed_url();
 	}
-
-
 }
